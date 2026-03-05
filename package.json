@@ -1,0 +1,40 @@
+{
+	"name": "campus-market-backend",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"start": "node index.js",
+		"dev": "nodemon index.js"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/alimancs/campus-market-backend.git"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"type": "module",
+	"bugs": {
+		"url": "https://github.com/alimancs/campus-market-backend/issues"
+	},
+	"homepage": "https://github.com/alimancs/campus-market-backend#readme",
+	"dependencies": {
+		"bcrypt": "^6.0.0",
+		"compression": "latest",
+		"cors": "^2.8.6",
+		"dotenv": "^17.3.1",
+		"express": "^5.2.1",
+		"express-rate-limit": "^8.2.1",
+		"helmet": "^8.1.0",
+		"helmet-csp": "^4.0.0",
+		"joi": "^18.0.2",
+		"mongoose": "^9.2.4",
+		"nodemailer": "^8.0.1"
+	},
+	"devDependencies": {
+		"@types/nodemailer": "^7.0.11",
+		"nodemon": "^3.1.14"
+	}
+}
