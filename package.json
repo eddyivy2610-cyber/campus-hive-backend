@@ -21,6 +21,7 @@
 	},
 	"homepage": "https://github.com/alimancs/campus-market-backend#readme",
 	"dependencies": {
+		"argon2": "^0.44.0",
 		"bcrypt": "^6.0.0",
 		"compression": "latest",
 		"cors": "^2.8.6",

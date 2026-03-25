@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { checkEmailAndPhoneExists, login, register, sendOtpToEmail, updateToUserPassword, verifyEmail, verifyEmailAndCreateTempData } from "../controllers/auth.controller.js";
+import { checkEmailAndPhoneExists, login, sendOtpToEmail, updateToUserPassword, verifyEmail, verifyEmailAndCreateTempData } from "../controllers/auth.controller.js";
+import { register } from "../controllers/user.controller.js";
 
 const router = Router();
 
