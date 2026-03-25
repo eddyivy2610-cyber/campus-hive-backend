@@ -328,6 +328,4 @@ Import the provided Postman collection to test all registration scenarios:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0.0 | 2024-01-15 | Initial API release |
-| 1.1.0 | 2024-02-01 | Added business profile validation for sellers |
-| 1.2.0 | 2024-03-01 | Enhanced password security with Argon2id |
+| 1.0.0 | 2026-03-25 | Initial API release |
