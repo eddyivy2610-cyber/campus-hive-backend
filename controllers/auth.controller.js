@@ -1,11 +1,11 @@
-import { doesEmailAndPhoneExists, loginUser, registerUser, sendOtpToEmailService, verifyEmailService, updateUserPassword } from "../services/auth.service.js";
+import { doesEmailAndPhoneExists, loginUser, registerUser, sendOtpToEmailService, verifyEmailService, updateUserPassword, getProfileByHandleService } from "../services/auth.service.js";
 
-export const login = (req, res) => {
+export const login = async (req, res) => {
     try {
-        const user = loginUser(req);
-        res.status(200).json({ message: "Login endpoint", user });
+        const user = await loginUser(req);
+        res.status(200).json({ message: "Login success", user });
     } catch (error) {
-        res.status(500).json({ message: "Internal Server Error", error: error.message });
+        res.status(401).json({ message: error.message || "Invalid credentials" });
     }
 }
 
@@ -90,6 +90,46 @@ export const updateToUserPassword = async (req, res) => {
             return res.status(result.status).json({ message: result.message });
         }
         res.status(200).json({ message: "User password updated successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Internal Server Error", error: error.message });
+    }
+}
+
+export const getProfileByHandle = async (req, res) => {
+    try {
+        const { handle } = req.params;
+        const profile = await getProfileByHandleService(handle);
+        if (!profile) {
+            return res.status(404).json({ message: "Profile not found" });
+        }
+        res.status(200).json({ data: profile });
+    } catch (error) {
+        res.status(500).json({ message: "Internal Server Error", error: error.message });
+    }
+}
+
+export const googleLogin = async (req, res) => {
+    try {
+        const { email, name, avatar, providerId } = req.body;
+        // This is a simplified OAuth flow. Real implementation should verify the Google ID token.
+        const result = await registerUser({
+            body: {
+                email,
+                provider: "google",
+                providerId,
+                profile: { displayName: name, avatar },
+                role: "buyer", // Default role
+                agreedToTerms: true
+            }
+        });
+
+        // If user already exists, it might fail with 409, so we log them in instead
+        if (result.status === 409) {
+            const user = await loginUser({ body: { email, isOAuth: true } });
+            return res.status(200).json({ message: "Google login successful", user });
+        }
+
+        res.status(200).json({ message: "Google login successful", user: result.data });
     } catch (error) {
         res.status(500).json({ message: "Internal Server Error", error: error.message });
     }

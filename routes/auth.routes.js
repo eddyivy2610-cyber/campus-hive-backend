@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { checkEmailAndPhoneExists, login, sendOtpToEmail, updateToUserPassword, verifyEmail, verifyEmailAndCreateTempData } from "../controllers/auth.controller.js";
+import { checkEmailAndPhoneExists, getProfileByHandle, login, sendOtpToEmail, updateToUserPassword, verifyEmail, verifyEmailAndCreateTempData, googleLogin } from "../controllers/auth.controller.js";
 import { register } from "../controllers/user.controller.js";
 
 const router = Router();
@@ -12,7 +12,9 @@ router.post("/send-otp-to-email", sendOtpToEmail);
 router.post("/verify-email-and-create-temp-data", verifyEmailAndCreateTempData);
 router.patch("/update-user-password", updateToUserPassword);
 router.post("/register", register);
+router.post("/google-login", googleLogin);
 // router.post("/refresh-token", );
 // router.post("/logout", );
 
+router.get("/profile/:handle", getProfileByHandle);
 export default router;

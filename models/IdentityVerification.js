@@ -1,4 +1,4 @@
-import { Schema, model, Types, models } from "mongoose";
+import mongoose, { Schema, model, Types } from "mongoose";
 
 const IdentityVerificationSchema = new Schema(
   {
@@ -11,7 +11,7 @@ const IdentityVerificationSchema = new Schema(
 
     role: {
       type: String,
-      enum: ["errand_runner", "client"],
+      enum: ["student", "alumni", "community_member", "vendor"],
       required: true,
     },
 
@@ -64,7 +64,7 @@ const IdentityVerificationSchema = new Schema(
   }
 );
 
-const IdentityVerification = models.IdentityVerification || model(
+const IdentityVerification = mongoose.models.IdentityVerification || model(
   "IdentityVerification",
   IdentityVerificationSchema
 );

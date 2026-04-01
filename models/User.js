@@ -1,9 +1,15 @@
 import mongoose, { Schema, model } from "mongoose";
-import argon2 from "argon2";
+
+/**
+ * User Model for Campus Market.
+ * Covers both Buyer and Seller (Vendor) roles with comprehensive profiles.
+ */
 
 const UserSchema = new Schema(
   {
-    // Core authentication fields
+    // ============================================================
+    // AUTHENTICATION & ACCOUNT
+    // ============================================================
     email: {
       type: String,
       required: [true, "Email is required"],
@@ -15,12 +21,25 @@ const UserSchema = new Schema(
     },
     password: {
       type: String,
-      required: false,
+      required: function() {
+        return this.provider === "email";
+      },
       select: false,
       minlength: [8, "Password must be at least 8 characters"],
     },
+    provider: {
+      type: String,
+      enum: ["email", "google", "apple"],
+      default: "email",
+    },
+    providerId: {
+      type: String,
+      default: null,
+    },
 
-    // Profile information
+    // ============================================================
+    // PROFILE INFORMATION
+    // ============================================================
     profile: {
       displayName: {
         type: String,
@@ -30,79 +49,85 @@ const UserSchema = new Schema(
         minlength: [3, "Display name must be at least 3 characters"],
         maxlength: [50, "Display name cannot exceed 50 characters"],
       },
+      handle: {
+        type: String,
+        unique: true,
+        lowercase: true,
+        trim: true,
+        index: true,
+      },
       bio: {
         type: String,
-        default: "Hey I'm using Campus Market!",
+        default: "Hey I'm using Campus Hive!",
         maxlength: [500, "Bio cannot exceed 500 characters"],
       },
       avatar: {
         type: String,
         default: null,
-        validate: {
-          validator: function(v) {
-            return !v || v.startsWith("http");
-          },
-          message: "Avatar must be a valid URL",
-        },
+      },
+      coverImage: {
+        type: String,
+        default: null,
       },
     },
 
-    // Personal information
+    // ============================================================
+    // PERSONAL & STUDENT DETAILS
+    // ============================================================
     personalDetails: {
       fullName: {
         type: String,
         trim: true,
         maxlength: [100, "Full name cannot exceed 100 characters"],
       },
-      dateOfBirth: {
-        type: Date,
-        validate: {
-          validator: function(v) {
-            return !v || v <= new Date();
-          },
-          message: "Date of birth cannot be in the future",
-        },
-      },
-      stateOfOrigin: {
+      dateOfBirth: Date,
+      stateOfOrigin: String,
+      address: {
         type: String,
-        trim: true,
+        default: "",
+      },
+      department: {
+        type: String,
+        default: "",
       },
       phones: {
         type: [String],
         default: [],
-        validate: {
-          validator: function(phones) {
-            return phones.every(p => /^\+?[\d\s-]{10,}$/.test(p));
-          },
-          message: "Invalid phone number format",
-        },
       },
     },
-
-    // Student information
+    settings: {
+        privacy: {
+            showEmail: { type: Boolean, default: false },
+            showPhone: { type: Boolean, default: false },
+            publicProfile: { type: Boolean, default: true },
+        },
+        notifications: {
+            email: { type: Boolean, default: true },
+            push: { type: Boolean, default: true },
+        }
+    },
     studentStatus: {
       isStudent: {
         type: Boolean,
         default: false,
       },
-      departmentFaculty: {
+      status: {
+        type: String,
+        enum: ["student", "alumni", "community"],
+        default: "community",
+      },
+      schoolName: {
         type: String,
         default: "",
-        trim: true,
       },
-      // studentId: {
-      //   type: String,
-      //   sparse: true,
-      //   unique: true,
-      // },
-      // enrollmentYear: {
-      //   type: Number,
-      //   min: 1900,
-      //   max: new Date().getFullYear() + 5,
-      // },
+      studentId: String,
+      enrollmentYear: Number,
+      graduationYear: Number,
     },
 
-    // Business/seller information
+    // ============================================================
+    // ROLE & BUSINESS PROFILE (Seller Specific)
+    // ============================================================
     role: {
       type: String,
       enum: ["seller", "buyer", "admin"],
@@ -112,198 +137,107 @@ const UserSchema = new Schema(
     businessProfile: {
       name: {
         type: String,
-        trim: true,
-        validate: {
-          validator: function(v) {
-            return this.role !== "seller" || (v && v.length > 0);
-          },
-          message: "Business name is required for sellers",
-        },
+        default: "",
       },
       description: {
         type: String,
-        maxlength: [1000, "Business description cannot exceed 1000 characters"],
+        maxlength: [2000], // Extended Bio
       },
       tags: {
         type: [String],
         default: [],
-        validate: {
-          validator: function(tags) {
-            return tags.length <= 10;
-          },
-          message: "Maximum 10 business tags allowed",
-        },
       },
+      category: {
+        type: String,
+        default: "General",
+      },
+      policies: {
+        type: String,
+        default: "Standard campus trading policies apply."
+      },
+      workingHours: {
+        type: String,
+        default: "Always online",
+      },
+      responseRate: { type: String, default: "100%" },
+      responseTime: { type: String, default: "within hours" },
+      followersCount: { type: Number, default: 0 },
+      soldItemsCount: { type: Number, default: 0 },
+      activeListingsCount: { type: Number, default: 0 },
+      totalSalesAmount: { type: Number, default: 0 },
     },
 
-    // Verification and identification
-    identification: {
-      imageUrl: {
-        type: String,
-        validate: {
-          validator: function(v) {
-            return !v || v.startsWith("http");
-          },
-          message: "Identification image must be a valid URL",
-        },
-      },
-      verified: {
-        type: Boolean,
-        default: false,
-      },
-      verifiedAt: Date,
-      verificationMethod: {
-        type: String,
-        enum: ["manual", "automated", "third_party"],
-      },
+    // ============================================================
+    // SOCIAL & ACHIEVEMENTS
+    // ============================================================
+    socialLinks: {
+      whatsapp: String,
+      instagram: String,
+      twitter: String,
+      linkedin: String,
     },
+    achievements: [{
+      name: String,
+      icon: String, // Lucide icon name
+      color: String, // Tailwind color class
+      type: {
+        type: String,
+        enum: ["Achievement", "System", "Legacy"],
+        default: "Achievement",
+      },
+      description: String,
+      unlockedAt: { type: Date, default: Date.now }
+    }],
 
-    // Account status and tracking
+    // ============================================================
+    // ACCOUNT STATUS & METRICS
+    // ============================================================
     accountStatus: {
       type: String,
-      enum: ["active", "suspended", "deleted", "temporarily_deactivated", "banned"],
+      enum: ["active", "suspended", "deleted", "banned"],
       default: "active",
       index: true,
     },
-    accountDeactivationReason: {
-      type: String,
-      enum: ["user_request", "policy_violation", "inactivity", "other"],
-    },
-    deactivatedAt: Date,
-
-    // Ratings and agreements
     rating: {
-      average: {
-        type: Number,
-        default: 0,
-        min: 0,
-        max: 5,
-      },
-      count: {
-        type: Number,
-        default: 0,
-        min: 0,
-      },
+      average: { type: Number, default: 0 },
+      count: { type: Number, default: 0 },
     },
     agreedToTerms: {
       type: Boolean,
-      required: [true, "User must agree to terms and conditions"],
+      required: true,
     },
-    agreedToTermsAt: Date,
-
-    // Verification flags
-    emailVerified: {
-      type: Boolean,
-      default: false,
-      index: true,
-    },
-    phoneVerified: {
-      type: Boolean,
-      default: false,
-    },
-    emailVerificationToken: String,
-    emailVerificationExpires: Date,
-    passwordResetToken: String,
-    passwordResetExpires: Date,
-
-    // Session and activity tracking
+    emailVerified: { type: Boolean, default: false },
     lastLoginAt: Date,
-    lastActiveAt: Date,
-    loginCount: {
-      type: Number,
-      default: 0,
-    },
-    previousLoginAt: Date,
-
-    // Security and compliance
-    ipAddresses: [String],
-    deviceInfo: {
-      type: Map,
-      of: String,
-    },
-    twoFactorEnabled: {
-      type: Boolean,
-      default: false,
-    },
-    twoFactorSecret: {
-      type: String,
-      select: false,
-    },
-
-    // Metadata
-    metadata: {
-      type: Map,
-      of: Schema.Types.Mixed,
-      default: {},
-    },
+    loginCount: { type: Number, default: 0 },
   },
   {
     timestamps: true,
     toJSON: {
       transform: (doc, ret) => {
         delete ret.password;
-        delete ret.emailVerificationToken;
-        delete ret.passwordResetToken;
-        delete ret.twoFactorSecret;
         return ret;
       },
     },
   }
 );
 
-// Indexes for better query performance
-UserSchema.index({ "profile.displayName": 1 });
-UserSchema.index({ role: 1, accountStatus: 1 });
-UserSchema.index({ "rating.average": -1 });
-UserSchema.index({ createdAt: -1 });
-UserSchema.index({ lastLoginAt: -1 });
+// Pre-save hook for handle generation
+UserSchema.pre("save", async function() {
+  if (this.isModified("profile.displayName") || !this.profile.handle) {
+    this.profile.handle = this.profile.displayName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ""); // Matches frontend squash logic
+  }
+});
 
 // Virtual for full profile URL
 UserSchema.virtual("profileUrl").get(function() {
   return `/users/${this._id}`;
 });
 
-
-// Pre-save middleware
-// UserSchema.pre("save", async function(next) {
-//   if (this.isModified("agreedToTerms") && this.agreedToTerms) {
-//     this.agreedToTermsAt = new Date();
-//   }
-  
-//   if (this.isModified("accountStatus") && this.accountStatus === "deleted") {
-//     this.deactivatedAt = new Date();
-//   }
-
-//   try {
-//     // Hash password using Argon2 with recommended parameters
-//     this.password = await argon2.hash(this.password, {
-//       type: argon2.argon2id,
-//       memoryCost: 2 ** 12,  // 4 MB - Very fast, still secure
-//       timeCost: 2,          // 2 iterations
-//       parallelism: 1,
-//       hashLength: 32,
-//       saltLength: 16,
-//     });
-//     next();
-//   } catch (error) {
-//     next(error);
-//   }
-  
-// });
-
-// Methods
 UserSchema.methods.updateLastLogin = async function() {
-  this.previousLoginAt = this.lastLoginAt;
   this.lastLoginAt = new Date();
   this.loginCount += 1;
-  this.lastActiveAt = new Date();
-  return this.save();
-};
-
-UserSchema.methods.updateRating = async function(newRating) {
-  const totalRating = this.rating.average * this.rating.count;
-  this.rating.count += 1;
-  this.rating.average = (totalRating + newRating) / this.rating.count;
   return this.save();
 };
 

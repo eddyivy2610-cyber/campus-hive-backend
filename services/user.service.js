@@ -13,6 +13,9 @@ export const registerUserService = async (req) => {
         agreedToTerms, 
         identification, 
         businessProfile, 
+        provider,
+        providerId,
+        schoolName
         } = req.body;
     
     try {
@@ -79,8 +82,41 @@ export const registerUserService = async (req) => {
             }
         }
         
-        // Validate business profile for sellers
+        // Validate auth provider
+        if (!provider || provider === "email") {
+            if (!password) {
+                return {
+                    success: false,
+                    message: "Password is required for email registration",
+                    status: 400
+                };
+            }
+        } else if (!providerId) {
+            return {
+                success: false,
+                message: "providerId is required for OAuth registration",
+                status: 400
+            };
+        }
+
+        const normalizedStudentStatus = {
+            isStudent: studentStatus?.isStudent ?? false,
+            schoolName:
+                studentStatus?.schoolName ||
+                schoolName ||
+                studentStatus?.departmentFaculty ||
+                ""
+        };
+
+        // Validate student status for sellers
         if (role === "seller") {
+            if (normalizedStudentStatus?.isStudent !== true) {
+                return {
+                    success: false,
+                    message: "Only students can register as sellers",
+                    status: 400
+                };
+            }
             if (!req.body.businessProfile?.name) {
                 return {
                     success: false,
@@ -88,6 +124,15 @@ export const registerUserService = async (req) => {
                     status: 400
                 };
             }
+        }
+
+        // If student, require School name
+        if (normalizedStudentStatus?.isStudent === true && !normalizedStudentStatus?.schoolName) {
+            return {
+                success: false,
+                message: "School name is required for students",
+                status: 400
+            };
         }
         
         // Construct user object matching the refined schema
@@ -104,10 +149,7 @@ export const registerUserService = async (req) => {
                 stateOfOrigin: personalDetails.stateOfOrigin?.trim(),
                 phones: personalDetails.phones || []
             } : undefined,
-            studentStatus: studentStatus || {
-                isStudent: false,
-                departmentFaculty: ""
-            },
+            studentStatus: normalizedStudentStatus,
             role: role,
             agreedToTerms: agreedToTerms,
             agreedToTermsAt: new Date(),
@@ -403,3 +445,6 @@ export const updateLastLoginService = async (userId, ipAddress, deviceInfo) => {
         };
     }
 };
+
+
+

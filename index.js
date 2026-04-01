@@ -1,4 +1,3 @@
-
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -11,21 +10,16 @@ import routes from "./routes/index.js";
 import { connectDB } from "./utils/db.js";
 
 const app = express();
-const port = process.env.PORT || 3000;
-
+const port = process.env.PORT || 4000;
 
 // Security middlewares
-app.use(helmet());
-app.use(helmet.contentSecurityPolicy({
-  directives: {
-    defaultSrc: ["'self'"],
-    scriptSrc: ["'self'"],
-  },
+app.use(helmet({
+    contentSecurityPolicy: false,
 }));
 app.use(cors({
-    origin:process.env.ALLOWED_ORIGIN || "*",
-    methods:["GET","POST","PUT","DELETE"],
-    allowedHeaders:["Content-Type","Authorization"]
+    origin: process.env.ALLOWED_ORIGIN ? process.env.ALLOWED_ORIGIN.split(',') : "*",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
 }));
 app.use(compression());
 

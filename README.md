@@ -64,7 +64,7 @@ The request body must be a JSON object containing the following fields:
 | Field | Type | Description | Validation |
 |-------|------|-------------|------------|
 | isStudent | boolean | Student status | Default: `false` |
-| departmentFaculty | string | Department/Faculty | |
+| schoolName | string | School Name | |
 | studentId | string | Student ID number | Must be unique if provided |
 | enrollmentYear | number | Year of enrollment | Must be between 1900 and current year + 5 |
 
@@ -121,7 +121,7 @@ The request body must be a JSON object containing the following fields:
   },
   "studentStatus": {
     "isStudent": true,
-    "departmentFaculty": "Computer Science - Engineering",
+    "schoolName": "Ahmadu Bello University",
     "studentId": "STU2024001",
     "enrollmentYear": 2024
   },
@@ -174,7 +174,7 @@ The request body must be a JSON object containing the following fields:
   },
   "studentStatus": {
     "isStudent": true,
-    "departmentFaculty": "Business Administration",
+    "schoolName": "Ahmadu Bello University",
     "studentId": "STU2024123",
     "enrollmentYear": 2023
   },
@@ -329,3 +329,4 @@ Import the provided Postman collection to test all registration scenarios:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2026-03-25 | Initial API release |
+\n### Student Status Field Update\n- The studentStatus.schoolName field replaces studentStatus.departmentFaculty (deprecated).\n
