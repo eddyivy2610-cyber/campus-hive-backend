@@ -31,9 +31,9 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use((err, req, res, next) => {
   console.error(err.stack);

@@ -1,4 +1,5 @@
 import Listing from "../models/Listing.js";
+import User from "../models/User.js";
 
 // --- Admin Endpoints ---
 
@@ -51,6 +52,14 @@ export const getActiveListings = async (req, res) => {
 export const createListing = async (req, res) => {
     try {
         const { sellerId, title, description, price, category, condition, images, location } = req.body;
+
+        const seller = await User.findById(sellerId).select("role studentStatus");
+        if (!seller || seller.role !== "seller") {
+            return res.status(403).json({ message: "Only verified sellers can create listings" });
+        }
+        if (!seller.studentStatus?.isVerified) {
+            return res.status(403).json({ message: "Student verification required to create listings" });
+        }
         
         const slug = title.toLowerCase().split(' ').join('-') + '-' + Date.now();
         const listingCode = "LST-" + Math.floor(1000 + Math.random() * 9000) + "-CH";

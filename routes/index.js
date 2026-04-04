@@ -6,6 +6,7 @@ import verificationRoutes from "./verification.routes.js";
 import listingRoutes from "./listing.routes.js";
 import orderRoutes from "./order.routes.js";
 import chatRoutes from "./chat.routes.js";
+import adminLogsRoutes from "./adminLogs.routes.js";
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use("/verification", verificationRoutes);
 router.use("/listing", listingRoutes);
 router.use("/order", orderRoutes);
 router.use("/chat", chatRoutes);
+router.use("/admin/logs", adminLogsRoutes);
 
 export default router;

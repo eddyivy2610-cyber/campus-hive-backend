@@ -1,4 +1,6 @@
 import User from "../models/User.js";
+import IdentityVerification from "../models/IdentityVerification.js";
+import AdminLog from "../models/AdminLog.js";
 import EmailVerification from "../models/EmailVerification.js";
 import argon2 from "argon2";
 
@@ -101,10 +103,15 @@ export const registerUserService = async (req) => {
 
         const normalizedStudentStatus = {
             isStudent: studentStatus?.isStudent ?? false,
+            isVerified: false,
             schoolName:
                 studentStatus?.schoolName ||
                 schoolName ||
                 studentStatus?.departmentFaculty ||
+                "",
+            idCardImage:
+                studentStatus?.idCardImage ||
+                studentStatus?.studentIdCard ||
                 ""
         };
 
@@ -131,6 +138,15 @@ export const registerUserService = async (req) => {
             return {
                 success: false,
                 message: "School name is required for students",
+                status: 400
+            };
+        }
+
+        // If student, require ID card for verification
+        if (normalizedStudentStatus?.isStudent === true && !normalizedStudentStatus?.idCardImage) {
+            return {
+                success: false,
+                message: "Student ID is required for students",
                 status: 400
             };
         }
@@ -185,6 +201,37 @@ export const registerUserService = async (req) => {
         
         // Create user
         const savedUser = await User.create(newUser);
+
+        await AdminLog.create({
+            type: "account_creation",
+            message: `New user account created: ${savedUser.profile?.displayName || savedUser.email}`,
+            userId: savedUser._id,
+            metadata: {
+                email: savedUser.email,
+                role: savedUser.role,
+            },
+        });
+
+        // Create identity verification record for students
+        if (normalizedStudentStatus?.isStudent === true && normalizedStudentStatus?.idCardImage) {
+            await IdentityVerification.create({
+                userId: savedUser._id,
+                role: "student",
+                document: {
+                    type: "student_id",
+                    frontImageUrl: normalizedStudentStatus.idCardImage
+                }
+            });
+
+            await AdminLog.create({
+                type: "verification_pending",
+                message: `Student verification pending for ${savedUser.profile?.displayName || savedUser.email}`,
+                userId: savedUser._id,
+                metadata: {
+                    schoolName: normalizedStudentStatus.schoolName,
+                },
+            });
+        }
         
         // Create email verification record
         const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();

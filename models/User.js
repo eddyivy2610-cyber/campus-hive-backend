@@ -111,12 +111,20 @@ const UserSchema = new Schema(
         type: Boolean,
         default: false,
       },
+      isVerified: {
+        type: Boolean,
+        default: false,
+      },
       status: {
         type: String,
         enum: ["student", "alumni", "community"],
         default: "community",
       },
       schoolName: {
+        type: String,
+        default: "",
+      },
+      idCardImage: {
         type: String,
         default: "",
       },
