@@ -1,9 +1,11 @@
 import { doesEmailAndPhoneExists, loginUser, registerUser, sendOtpToEmailService, verifyEmailService, updateUserPassword, getProfileByHandleService } from "../services/auth.service.js";
+import { generateToken } from "../utils/auth.js";
 
 export const login = async (req, res) => {
     try {
         const user = await loginUser(req);
-        res.status(200).json({ message: "Login success", user });
+        const token = generateToken(user);
+        res.status(200).json({ message: "Login success", user, token });
     } catch (error) {
         res.status(401).json({ message: error.message || "Invalid credentials" });
     }
@@ -28,12 +30,18 @@ export const verifyEmailAndCreateTempData = async (req, res) => {
         if (!result) {
             return res.status(401).json({ message: "Invalid or expired verification code" });
         }
-        const user = await registerUser({ body: userData });
-        if (user.status && user.status !== 200) {
-            return res.status(user.status).json({ message: user.message });
+        const userResult = await registerUser({ body: userData });
+        if (userResult.status && userResult.status !== 200) {
+            return res.status(userResult.status).json({ message: userResult.message });
         }
 
-        res.status(200).json({ message: "Email verified successfully", tempUserId: user.savedUser });
+        const token = generateToken(userResult.user);
+        res.status(200).json({ 
+            message: "Email verified and user registered successfully", 
+            tempUserId: userResult.savedUser,
+            user: userResult.user,
+            token 
+        });
     } catch (error) {
         console.log(error.message);
         res.status(500).json({ message: "Internal Server Error", error: error.message });
@@ -123,13 +131,16 @@ export const googleLogin = async (req, res) => {
             }
         });
 
+        let user;
         // If user already exists, it might fail with 409, so we log them in instead
         if (result.status === 409) {
-            const user = await loginUser({ body: { email, isOAuth: true } });
-            return res.status(200).json({ message: "Google login successful", user });
+            user = await loginUser({ body: { email, isOAuth: true } });
+        } else {
+            user = result.user;
         }
 
-        res.status(200).json({ message: "Google login successful", user: result.data });
+        const token = generateToken(user);
+        res.status(200).json({ message: "Google login successful", user, token });
     } catch (error) {
         res.status(500).json({ message: "Internal Server Error", error: error.message });
     }
