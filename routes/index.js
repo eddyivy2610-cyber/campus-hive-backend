@@ -16,7 +16,7 @@ router.get("/health", (_req, res) => {
 
 router.use("/auth", authRoutes);
 router.use("/search", searchRoutes);
-router.use("/user", userRoutes);
+router.use("/users", userRoutes);
 router.use("/verification", verificationRoutes);
 router.use("/listing", listingRoutes);
 router.use("/order", orderRoutes);

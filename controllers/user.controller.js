@@ -1,5 +1,6 @@
 import { registerUserService, getUserByIdService, updateUserService } from "../services/user.service.js";
 import User from "../models/User.js";
+import { generateToken } from "../utils/auth.js";
 
 export const register = async (req, res) => {
     try {
@@ -13,9 +14,11 @@ export const register = async (req, res) => {
             });
         }
         
+        const token = generateToken(result.data);
         res.status(201).json({ 
             message: result.message, 
-            data: result.data 
+            data: result.data,
+            token
         });
     } catch (error) {
         console.error("Registration error:", error);
