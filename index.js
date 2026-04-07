@@ -10,29 +10,32 @@ import { connectDB } from "./utils/db.js";
 const app = express();
 const port = process.env.PORT || 4000;
 
-// Security middlewares
-app.use(helmet({
-  contentSecurityPolicy: false,
-}));
+// 1. Position CORS at the VERY TOP to handle preflights before any other logic
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()) 
+  : ["*"];
 
-// CORS configuration supporting dynamic origins from environment variable
 app.use(cors({
   origin: (origin, callback) => {
-    const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ["*"];
+    // If no origin (e.g. server-to-server) or origin is in allowed list, or wildcard is present
     if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
       callback(null, true);
     } else {
+      console.warn(`CORS blocked for origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
+  credentials: true,
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 }));
 
+// 2. Standard security and compression
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 
-// Basic Rate limiting for security
+// 3. Rate limiting (after CORS check)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
   max: 100, 
