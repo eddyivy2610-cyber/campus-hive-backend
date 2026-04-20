@@ -23,24 +23,16 @@ export const verifyEmail = (req, res) => {
     }
 }
 
-export const verifyEmailAndCreateTempData = async (req, res) => {
-    const { email, otp, userData } = req.body;
+export const verifyEmailAndOTP = async (req, res) => {
+    const { email, otp } = req.body;
     try {
-        const result = await verifyEmailService(email, otp );
+        const result = await verifyEmailService(email, otp);
         if (!result) {
             return res.status(401).json({ message: "Invalid or expired verification code" });
         }
-        const userResult = await registerUser({ body: userData });
-        if (userResult.status && userResult.status !== 200) {
-            return res.status(userResult.status).json({ message: userResult.message });
-        }
-
-        const token = generateToken(userResult.user);
         res.status(200).json({ 
-            message: "Email verified and user registered successfully", 
-            tempUserId: userResult.savedUser,
-            user: userResult.user,
-            token 
+            success: true,
+            message: "Email verified successfully. Please complete your profile."
         });
     } catch (error) {
         console.log(error.message);

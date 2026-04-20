@@ -43,8 +43,7 @@ const UserSchema = new Schema(
     profile: {
       displayName: {
         type: String,
-        required: [true, "Display name is required"],
-        unique: true,
+        required: false, // Defaulting to handle/fullName initially
         trim: true,
         minlength: [3, "Display name must be at least 3 characters"],
         maxlength: [50, "Display name cannot exceed 50 characters"],
@@ -69,6 +68,25 @@ const UserSchema = new Schema(
         type: String,
         default: null,
       },
+    },
+
+    onboardingStep: {
+        type: String,
+        enum: ["otp_verified", "profile_completed", "onboarding_choice", "seller_pending", "completed"],
+        default: "otp_verified",
+    },
+
+    sellerStatus: {
+        type: String,
+        enum: ["none", "pending", "approved", "rejected"],
+        default: "none",
+    },
+
+    sellerApplication: {
+        idImage: String,
+        appliedAt: Date,
+        rejectedReason: String,
+        approvedAt: Date,
     },
 
     // ============================================================

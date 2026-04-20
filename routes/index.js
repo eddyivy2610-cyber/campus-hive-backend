@@ -9,6 +9,7 @@ import chatRoutes from "./chat.routes.js";
 import adminLogsRoutes from "./adminLogs.routes.js";
 
 import uploadRoutes from "./upload.routes.js";
+import onboardingRoutes from "./onboarding.routes.js";
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.get("/health", (_req, res) => {
 });
 
 router.use("/auth", authRoutes);
+router.use("/onboarding", onboardingRoutes);
 router.use("/search", searchRoutes);
 router.use("/users", userRoutes);
 router.use("/verification", verificationRoutes);
