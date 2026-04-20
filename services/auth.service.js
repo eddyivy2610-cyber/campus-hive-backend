@@ -70,6 +70,11 @@ export const registerUser = async (data) => {
             return { message: "Email already in use", status: 409 };
         }
 
+        const displayNameExists = await User.findOne({ "profile.displayName": profile.displayName.trim() });
+        if (displayNameExists) {
+            return { message: "Display name already taken", status: 409 };
+        }
+
         if (phone) {
             const phoneExists = await User.findOne({ phone: phone.trim() });
             if (phoneExists) {

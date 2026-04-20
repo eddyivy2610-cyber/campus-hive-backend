@@ -8,6 +8,8 @@ import orderRoutes from "./order.routes.js";
 import chatRoutes from "./chat.routes.js";
 import adminLogsRoutes from "./adminLogs.routes.js";
 
+import uploadRoutes from "./upload.routes.js";
+
 const router = Router();
 
 router.get("/health", (_req, res) => {
@@ -19,6 +21,7 @@ router.use("/search", searchRoutes);
 router.use("/users", userRoutes);
 router.use("/verification", verificationRoutes);
 router.use("/listing", listingRoutes);
+router.use("/upload", uploadRoutes);
 router.use("/order", orderRoutes);
 router.use("/chat", chatRoutes);
 router.use("/admin/logs", adminLogsRoutes);

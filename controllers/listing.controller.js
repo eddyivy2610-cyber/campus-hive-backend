@@ -51,17 +51,23 @@ export const getActiveListings = async (req, res) => {
 // Create a new listing
 export const createListing = async (req, res) => {
     try {
-        const { sellerId, title, description, price, category, condition, images, location } = req.body;
+        const { title, description, price, category, condition, images, location, ...details } = req.body;
+        const sellerId = req.user.id;
 
-        const seller = await User.findById(sellerId).select("role studentStatus");
-        if (!seller || seller.role !== "seller") {
+        // Verify seller status
+        const seller = await User.findById(sellerId).select("role studentStatus profile");
+        if (!seller || (seller.role !== "seller" && seller.role !== "pro")) {
             return res.status(403).json({ message: "Only verified sellers can create listings" });
         }
-        if (!seller.studentStatus?.isVerified) {
-            return res.status(403).json({ message: "Student verification required to create listings" });
+        
+        // Use matches existing logic if student verification is enabled
+        // Allowing both pro and verified students
+        const isStudentVerified = seller.studentStatus?.isVerified || seller.role === "pro";
+        if (!isStudentVerified) {
+            return res.status(403).json({ message: "Student verification required to create listings. Please check your profile status." });
         }
         
-        const slug = title.toLowerCase().split(' ').join('-') + '-' + Date.now();
+        const slug = title.toLowerCase().split(' ').join('-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
         const listingCode = "LST-" + Math.floor(1000 + Math.random() * 9000) + "-CH";
 
         const newListing = new Listing({
@@ -69,12 +75,13 @@ export const createListing = async (req, res) => {
             title,
             slug,
             description,
-            price,
+            price: Number(price),
             category,
             condition,
             images,
             location,
-            listingCode
+            listingCode,
+            ...details
         });
 
         await newListing.save();
@@ -82,6 +89,23 @@ export const createListing = async (req, res) => {
         res.status(201).json({ success: true, data: newListing });
     } catch (error) {
         console.error("Create listing error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+// Get listings for current authenticated user
+export const getUserListings = async (req, res) => {
+    try {
+        const sellerId = req.user.id;
+        const listings = await Listing.find({ sellerId }).sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            count: listings.length,
+            data: listings
+        });
+    } catch (error) {
+        console.error("Get user listings error:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };
