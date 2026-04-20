@@ -1,10 +1,11 @@
-import { getActiveListings, getAllListingsAdmin, createListing, getUserListings } from "../controllers/listing.controller.js";
+import { getActiveListings, getAllListingsAdmin, createListing, getUserListings, getListingById } from "../controllers/listing.controller.js";
 import { protect } from "../utils/auth.js";
 
 const router = Router();
 
 // Regular marketplace access
 router.get("/active", getActiveListings);
+router.get("/single/:id", getListingById);
 router.post("/create", protect, createListing);
 router.get("/user/all", protect, getUserListings);
 

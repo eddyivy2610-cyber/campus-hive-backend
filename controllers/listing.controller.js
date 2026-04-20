@@ -109,3 +109,27 @@ export const getUserListings = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+
+// Get a single listing by ID/Slug
+export const getListingById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Find by ID or Slug
+        const listing = await Listing.findOne({ 
+            $or: [
+                { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }, 
+                { slug: id }
+            ] 
+        }).populate("sellerId", "profile studentStatus email");
+
+        if (!listing) {
+            return res.status(404).json({ message: "Listing not found" });
+        }
+
+        res.status(200).json({ success: true, data: listing });
+    } catch (error) {
+        console.error("Get listing error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
