@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { updateOnboardingChoice, applyAsSeller, finalizeSellerProfile } from "../controllers/onboarding.controller.js";
+import { updateOnboardingChoice, applyAsSeller, finalizeSellerProfile, adminApproveSeller, adminRejectSeller } from "../controllers/onboarding.controller.js";
 import { protect } from "../utils/auth.js";
 import upload from "../middleware/upload.js";
 

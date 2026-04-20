@@ -32,6 +32,18 @@ export const loginUser = async (req) => {
     return user;
 }
 
+export const verifyPhoneService = async (req) => {
+    return true;
+}
+
+export const doesEmailAndPhoneExists = async (req) => {
+    const { email, phone } = req.body;
+    const emailExists = await User.findOne({ email: email?.toLowerCase().trim() });
+    const phoneExists = phone ? await User.findOne({ phone: phone?.trim() }) : false;
+
+    return { emailExists: !!emailExists, phoneExists: !!phoneExists };
+}
+
 export const verifyEmailService = async (email, otp) => {
     const record = await EmailVerification.findOne({ email, verificationCode: otp });
     if (!record) {

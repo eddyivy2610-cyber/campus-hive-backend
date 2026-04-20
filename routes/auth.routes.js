@@ -1,3 +1,4 @@
+import { Router } from "express";
 import { checkEmailAndPhoneExists, getProfileByHandle, login, sendOtpToEmail, updateToUserPassword, verifyEmail, verifyEmailAndOTP, googleLogin, register } from "../controllers/auth.controller.js";
 
 const router = Router();

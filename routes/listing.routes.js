@@ -1,3 +1,4 @@
+import { Router } from "express";
 import { getActiveListings, getAllListingsAdmin, createListing, getUserListings, getListingById } from "../controllers/listing.controller.js";
 import { protect } from "../utils/auth.js";
 
