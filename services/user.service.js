@@ -318,7 +318,7 @@ export const updateUserService = async (userId, updateData, requestingUserId) =>
         }
         
         // Authorization check (only admin or the user themselves can update)
-        if (requestingUserId !== userId.toString()) {
+        if (requestingUserId?.toString() !== userId.toString()) {
             const requestingUser = await User.findById(requestingUserId);
             if (requestingUser?.role !== "admin") {
                 return {
