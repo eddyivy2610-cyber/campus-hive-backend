@@ -4,7 +4,7 @@ Here's a comprehensive API documentation for your Sign Up endpoint, formatted fo
 
 # User Registration API
 
-Create a new user account on Campus Market platform. Users can register as either buyers or sellers with their profile information and verification details.
+Create a new user account on Campus Hive platform. Users can register as either buyers or sellers with their profile information and verification details.
 
 ## Endpoint
 
@@ -43,7 +43,7 @@ The request body must be a JSON object containing the following fields:
 | password | string | Account password | • Required for email-based registration<br>• Minimum 8 characters<br>• Will be hashed using Argon2id |
 | provider | string | Authentication provider | Values: `"email"`, `"google"`, `"facebook"`, `"apple"` |
 | providerId | string | OAuth provider ID | Required if using OAuth providers |
-| profile.bio | string | User biography | Maximum 500 characters<br>Default: "Hey I'm using Campus Market!" |
+| profile.bio | string | User biography | Maximum 500 characters<br>Default: "Hey I'm using Campus Hive!" |
 | profile.avatar | string | Profile picture URL | Must be a valid URL |
 | personalDetails | object | Personal information | See [Personal Details](#personal-details-object) |
 | studentStatus | object | Student information | See [Student Status Object](#student-status-object) |

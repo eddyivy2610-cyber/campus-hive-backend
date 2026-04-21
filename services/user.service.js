@@ -156,7 +156,7 @@ export const registerUserService = async (req) => {
             email: email.toLowerCase().trim(),
             profile: {
                 displayName: profile.displayName.trim(),
-                bio: profile.bio || "Hey I'm using Campus Market!",
+                bio: profile.bio || "Hey I'm using Campus Hive!",
                 avatar: profile.avatar || null
             },
             personalDetails: personalDetails ? {

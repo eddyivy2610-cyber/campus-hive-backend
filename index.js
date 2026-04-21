@@ -48,7 +48,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Basic health check for Render
 app.get("/", (req, res) => {
-  res.status(200).json({ message: "Campus Market API is live", status: "ok" });
+  res.status(200).json({ message: "Campus Hive API is live", status: "ok" });
 });
 
 // API Routes

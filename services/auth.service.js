@@ -131,18 +131,18 @@ export const sendOtpToEmailService = async (req) => {
     });
 
     const htmlContent = `<div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <h2 style="color: #4CAF50;">Campus Market - Email Verification</h2>
+        <h2 style="color: #4CAF50;">Campus Hive - Email Verification</h2>
         <p>Dear User,</p>
         <p>Your verification code is:</p>
         <h1 style="color: #FF5722;">${otp}</h1>
         <p>This code will expire in 10 minutes.</p>
         <p>Use this to complete your registration.</p>
         <br/>
-        <p>Best regards,<br/>Campus Market Team</p>
+        <p>Best regards,<br/>Campus Hive Team</p>
     </div>`;
 
     const mailOptions = {
-        from: '"Campus Market" <userunitapp@gmail.com>',
+        from: '"Campus Hive" <userunitapp@gmail.com>',
         to: email,
         subject: "Verify your email",
         html: htmlContent,

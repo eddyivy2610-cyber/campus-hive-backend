@@ -1,7 +1,7 @@
 import mongoose, { Schema, model } from "mongoose";
 
 /**
- * User Model for Campus Market.
+ * User Model for Campus Hive.
  * Covers both Buyer and Seller (Vendor) roles with comprehensive profiles.
  */
 
