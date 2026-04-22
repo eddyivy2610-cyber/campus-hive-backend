@@ -1,5 +1,6 @@
 import Admin from "../models/Admin.js";
 import jwt from "jsonwebtoken";
+import argon2 from "argon2";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your_fallback_secret_key_change_in_production";
 const ADMIN_REGISTRATION_KEY = process.env.ADMIN_REGISTRATION_KEY || "hive-admin-2025";
@@ -22,11 +23,14 @@ export const adminSignUp = async (req, res) => {
       return res.status(400).json({ message: "Admin with this email or username already exists." });
     }
 
+    // Hash password manually (consistent with User model strategy)
+    const hashedPassword = await argon2.hash(password);
+
     // Create admin
     const admin = await Admin.create({
-      username,
-      email,
-      password,
+      username: username.toLowerCase().trim(),
+      email: email.toLowerCase().trim(),
+      password: hashedPassword,
     });
 
     if (admin) {
@@ -42,8 +46,12 @@ export const adminSignUp = async (req, res) => {
       res.status(400).json({ message: "Invalid admin data." });
     }
   } catch (error) {
-    console.error("Admin Signup Error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("Admin Signup Error DETAILS:", {
+      message: error.message,
+      stack: error.stack,
+      body: { ...req.body, password: "[REDACTED]" }
+    });
+    res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };
 

@@ -1,5 +1,5 @@
 import mongoose, { Schema, model } from "mongoose";
-import bcrypt from "bcrypt";
+import argon2 from "argon2";
 
 const AdminSchema = new Schema(
   {
@@ -45,17 +45,9 @@ const AdminSchema = new Schema(
   }
 );
 
-// Hash password before saving
-AdminSchema.pre("save", async function(next) {
-  if (!this.isModified("password")) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
-
-// Method to compare password
+// Method to compare password using argon2
 AdminSchema.methods.comparePassword = async function(enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+  return await argon2.verify(this.password, enteredPassword);
 };
 
 const Admin = mongoose.models.Admin || model("Admin", AdminSchema);
