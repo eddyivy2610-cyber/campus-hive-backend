@@ -2,7 +2,7 @@ export const PROFILE_CATALOG = [
   {
     id: "vendor-1",
     name: "Campus Hive Official",
-    handle: "campus-market",
+    handle: "campus-hive",
     bio: "One-stop shop for all campus essentials. High quality, student prices.",
     rating: 4.9,
     avatar:
@@ -42,9 +42,9 @@ export const PROFILE_CATALOG = [
     ],
     socialLinks: {
       whatsapp: "https://wa.me/1234567890",
-      instagram: "https://instagram.com/campusmarket",
-      twitter: "https://twitter.com/campusmarket",
-      linkedin: "https://linkedin.com/company/campusmarket",
+      instagram: "https://instagram.com/campushive",
+      twitter: "https://twitter.com/campushive",
+      linkedin: "https://linkedin.com/company/campushive",
     },
   },
   {

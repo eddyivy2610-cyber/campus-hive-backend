@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { checkEmailAndPhoneExists, getProfileByHandle, login, sendOtpToEmail, updateToUserPassword, verifyEmail, verifyEmailAndOTP, googleLogin, register } from "../controllers/auth.controller.js";
+import { checkEmailAndPhoneExists, getProfileByHandle, login, sendOtpToEmail, updateToUserPassword, verifyEmail, verifyEmailAndOTP, googleLogin, register, refreshToken } from "../controllers/auth.controller.js";
+import { protect } from "../utils/auth.js";
 
 const router = Router();
 
@@ -11,7 +12,7 @@ router.post("/verify-otp", verifyEmailAndOTP);
 router.patch("/update-user-password", updateToUserPassword);
 router.post("/register", register);
 router.post("/google-login", googleLogin);
-// router.post("/refresh-token", );
+router.get("/refresh-token", protect, refreshToken);
 // router.post("/logout", );
 
 router.get("/profile/:handle", getProfileByHandle);

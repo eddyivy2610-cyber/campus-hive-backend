@@ -1,4 +1,6 @@
 import User from "../models/User.js";
+import AdminLog from "../models/AdminLog.js";
+import Notification from "../models/Notification.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 
 /**
@@ -54,6 +56,31 @@ export const applyAsSeller = async (req, res) => {
         user.studentStatus.idCardImage = result.secure_url;
 
         await user.save();
+
+        // Create Admin Log for initial tracking
+        await AdminLog.create({
+            type: "verification_pending",
+            message: `New seller application from ${user.email}`,
+            userId: user._id,
+            metadata: { 
+                action: "seller_application_submitted",
+                email: user.email 
+            }
+        });
+
+        // Notify all admins
+        const admins = await User.find({ role: "admin" });
+        await Promise.all(admins.map(admin => 
+            Notification.create({
+                recipient: admin._id,
+                sender: user._id,
+                type: "verification_pending",
+                title: "New Seller Application",
+                message: `${user.profile.displayName || user.email} has submitted a seller verification request.`,
+                link: "/admin/users/pending"
+            })
+        ));
+
         res.status(200).json({ 
             success: true, 
             message: "Application submitted successfully",
@@ -67,7 +94,6 @@ export const applyAsSeller = async (req, res) => {
 
 /**
  * Finalize Seller Profile (After Approval)
- * Set Display Name and other business info
  */
 export const finalizeSellerProfile = async (req, res) => {
     try {
@@ -101,7 +127,7 @@ export const finalizeSellerProfile = async (req, res) => {
 };
 
 /**
- * SIMULATION ONLY: Admin Approve Seller
+ * Admin: Approve Seller
  */
 export const adminApproveSeller = async (req, res) => {
     try {
@@ -110,10 +136,35 @@ export const adminApproveSeller = async (req, res) => {
         if (!user) return res.status(404).json({ message: "User not found" });
 
         user.sellerStatus = "approved";
+        user.role = "seller";
+        user.studentStatus.isVerified = true;
+        user.onboardingStep = "completed";
         user.sellerApplication.approvedAt = new Date();
         
-        // In a real app, this would trigger a notification
         await user.save();
+
+        // Cleanup: Mark corresponding pending notifications as read for all admins
+        await Notification.updateMany(
+            { sender: userId, type: "verification_pending" },
+            { read: true }
+        );
+
+        await AdminLog.create({
+            type: "verification_approved",
+            message: `Seller application approved for ${user.email}`,
+            userId: user._id,
+            metadata: { action: "seller_approved" }
+        });
+
+        // Notify User
+        await Notification.create({
+            recipient: user._id,
+            type: "verification_approved",
+            title: "Application Approved!",
+            message: "Your seller application has been approved. You can now start listing your products on Campus Hive.",
+            link: "/onboarding/seller/finalize"
+        });
+
         res.status(200).json({ success: true, message: "Seller approved", user });
     } catch (error) {
         console.error("Admin approve error:", error);
@@ -122,7 +173,7 @@ export const adminApproveSeller = async (req, res) => {
 };
 
 /**
- * SIMULATION ONLY: Admin Reject Seller
+ * Admin: Reject Seller
  */
 export const adminRejectSeller = async (req, res) => {
     try {
@@ -136,6 +187,29 @@ export const adminRejectSeller = async (req, res) => {
         user.sellerApplication.rejectedReason = reason || "Incomplete ID information";
 
         await user.save();
+
+        // Cleanup: Mark corresponding pending notifications as read for all admins
+        await Notification.updateMany(
+            { sender: userId, type: "verification_pending" },
+            { read: true }
+        );
+
+        await AdminLog.create({
+            type: "verification_rejected",
+            message: `Seller application rejected for ${user.email}`,
+            userId: user._id,
+            metadata: { action: "seller_rejected", reason }
+        });
+
+        // Notify User
+        await Notification.create({
+            recipient: user._id,
+            type: "verification_rejected",
+            title: "Application Rejected",
+            message: `Your seller application was rejected. Reason: ${reason || "Incomplete ID information"}. Please try again with valid identification.`,
+            link: "/onboarding/seller"
+        });
+
         res.status(200).json({ success: true, message: "Seller rejected", user });
     } catch (error) {
         console.error("Admin reject error:", error);

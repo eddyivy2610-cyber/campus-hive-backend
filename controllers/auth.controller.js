@@ -137,3 +137,18 @@ export const googleLogin = async (req, res) => {
         res.status(500).json({ message: "Internal Server Error", error: error.message });
     }
 }
+
+/**
+ * Refresh current user data and issue a fresh JWT
+ */
+export const refreshToken = async (req, res) => {
+    try {
+        // req.user is already populated by 'protect' middleware
+        const user = await loginUser({ body: { email: req.user.email, isOAuth: true } });
+        const token = generateToken(user);
+        res.status(200).json({ message: "Token refreshed", user, token });
+    } catch (error) {
+        console.error("Refresh token error:", error);
+        res.status(500).json({ message: "Failed to refresh token", error: error.message });
+    }
+}

@@ -75,13 +75,43 @@ export const updateUser = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
     try {
-        const users = await User.find()
+        const { 
+            role, 
+            sellerStatus, 
+            accountStatus, 
+            search, 
+            page = 1, 
+            limit = 50 
+        } = req.query;
+
+        const query = {};
+
+        // Filters
+        if (role) query.role = role;
+        if (sellerStatus) query.sellerStatus = sellerStatus;
+        if (accountStatus) query.accountStatus = accountStatus;
+
+        // Search (Email or Name)
+        if (search) {
+            query.$or = [
+                { email: { $regex: search, $options: "i" } },
+                { "profile.displayName": { $regex: search, $options: "i" } },
+                { "personalDetails.fullName": { $regex: search, $options: "i" } }
+            ];
+        }
+
+        const users = await User.find(query)
             .select("-password -emailVerificationToken -passwordResetToken -twoFactorSecret")
-            .sort({ createdAt: -1 });
-        
+            .sort({ createdAt: -1 })
+            .limit(Number(limit))
+            .skip((Number(page) - 1) * Number(limit));
+
+        const total = await User.countDocuments(query);
+
         res.status(200).json({ 
             success: true,
             count: users.length,
+            total,
             data: users 
         });
     } catch (error) {

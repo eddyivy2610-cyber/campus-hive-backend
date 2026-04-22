@@ -10,6 +10,7 @@ import adminLogsRoutes from "./adminLogs.routes.js";
 
 import uploadRoutes from "./upload.routes.js";
 import onboardingRoutes from "./onboarding.routes.js";
+import notificationRoutes from "./notification.routes.js";
 
 const router = Router();
 
@@ -27,5 +28,6 @@ router.use("/upload", uploadRoutes);
 router.use("/order", orderRoutes);
 router.use("/chat", chatRoutes);
 router.use("/admin/logs", adminLogsRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;
