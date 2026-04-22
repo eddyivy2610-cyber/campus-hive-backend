@@ -40,3 +40,22 @@ export const createOrder = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+
+// Get orders for the current seller
+export const getSellerOrders = async (req, res) => {
+    try {
+        const sellerId = req.user.id;
+        const orders = await Order.find({ sellerId })
+            .populate("buyerId", "profile.displayName profile.avatar email")
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({
+            success: true,
+            count: orders.length,
+            data: orders
+        });
+    } catch (error) {
+        console.error("Get seller orders error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};

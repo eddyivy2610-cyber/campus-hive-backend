@@ -12,6 +12,7 @@ import adminLogsRoutes from "./adminLogs.routes.js";
 import uploadRoutes from "./upload.routes.js";
 import onboardingRoutes from "./onboarding.routes.js";
 import notificationRoutes from "./notification.routes.js";
+import dashboardRoutes from "./dashboard.routes.js";
 
 const router = Router();
 
@@ -31,5 +32,6 @@ router.use("/chat", chatRoutes);
 router.use("/admin/auth", adminAuthRoutes);
 router.use("/admin/logs", adminLogsRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/dashboard", dashboardRoutes);
 
 export default router;
