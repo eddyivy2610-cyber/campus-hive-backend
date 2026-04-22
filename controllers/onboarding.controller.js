@@ -132,16 +132,23 @@ export const finalizeSellerProfile = async (req, res) => {
 export const adminApproveSeller = async (req, res) => {
     try {
         const { userId } = req.params;
-        const user = await User.findById(userId);
-        if (!user) return res.status(404).json({ message: "User not found" });
-
-        user.sellerStatus = "approved";
-        user.role = "seller";
-        user.studentStatus.isVerified = true;
-        user.onboardingStep = "completed";
-        user.sellerApplication.approvedAt = new Date();
         
-        await user.save();
+        // Atomic update to ensure all fields are persisted simultaneously
+        const user = await User.findByIdAndUpdate(
+            userId,
+            {
+                $set: {
+                    sellerStatus: "approved",
+                    role: "seller",
+                    onboardingStep: "completed",
+                    "studentStatus.isVerified": true,
+                    "sellerApplication.approvedAt": new Date()
+                }
+            },
+            { new: true, runValidators: true }
+        );
+
+        if (!user) return res.status(404).json({ message: "User not found" });
 
         // Cleanup: Mark corresponding pending notifications as read for all admins
         await Notification.updateMany(
@@ -179,14 +186,21 @@ export const adminRejectSeller = async (req, res) => {
     try {
         const { userId } = req.params;
         const { reason } = req.body;
-        const user = await User.findById(userId);
+
+        // Atomic update
+        const user = await User.findByIdAndUpdate(
+            userId,
+            {
+                $set: {
+                    sellerStatus: "rejected",
+                    onboardingStep: "onboarding_choice", // Let them try again
+                    "sellerApplication.rejectedReason": reason || "Incomplete ID information"
+                }
+            },
+            { new: true, runValidators: true }
+        );
+
         if (!user) return res.status(404).json({ message: "User not found" });
-
-        user.sellerStatus = "rejected";
-        user.onboardingStep = "onboarding_choice"; // Let them try again
-        user.sellerApplication.rejectedReason = reason || "Incomplete ID information";
-
-        await user.save();
 
         // Cleanup: Mark corresponding pending notifications as read for all admins
         await Notification.updateMany(
