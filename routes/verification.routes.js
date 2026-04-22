@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { submitIdentityVerification, getPendingVerifications, reviewVerification, getAllVerifications } from "../controllers/verification.controller.js";
-import { protect, adminOnly } from "../utils/auth.js";
+import { protect, adminProtect } from "../utils/auth.js";
 
 const router = Router();
 
@@ -8,8 +8,8 @@ const router = Router();
 router.post("/submit", protect, submitIdentityVerification);
 
 // Admin can fetch and review
-router.get("/pending", protect, adminOnly, getPendingVerifications);
-router.get("/all", protect, adminOnly, getAllVerifications);
-router.patch("/review/:id", protect, adminOnly, reviewVerification);
+router.get("/pending", adminProtect, getPendingVerifications);
+router.get("/all", adminProtect, getAllVerifications);
+router.patch("/review/:id", adminProtect, reviewVerification);
 
 export default router;

@@ -63,3 +63,36 @@ export const adminOnly = (req, res, next) => {
   }
 };
 
+/**
+ * Middleware to protect admin routes and verify against Admin collection
+ */
+export const adminProtect = async (req, res, next) => {
+  let token;
+
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    try {
+      token = req.headers.authorization.split(" ")[1];
+      const decoded = jwt.verify(token, JWT_SECRET);
+
+      // Verify against Admin collection
+      const Admin = (await import("../models/Admin.js")).default;
+      req.admin = await Admin.findById(decoded.id).select("-password");
+
+      if (!req.admin) {
+        return res.status(401).json({ message: "Not authorized as admin, account not found" });
+      }
+
+      next();
+    } catch (error) {
+      console.error("Admin Auth error:", error);
+      res.status(401).json({ message: "Not authorized, admin token failed" });
+    }
+  }
+
+  if (!token) {
+    res.status(401).json({ message: "Not authorized, no admin token" });
+  }
+};
