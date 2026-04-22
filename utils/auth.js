@@ -96,3 +96,48 @@ export const adminProtect = async (req, res, next) => {
     res.status(401).json({ message: "Not authorized, no admin token" });
   }
 };
+/**
+ * Middleware to allow both standard Users and Administrators
+ * Useful for shared features like notifications
+ */
+export const unifiedAuth = async (req, res, next) => {
+  let token;
+
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    try {
+      token = req.headers.authorization.split(" ")[1];
+      const decoded = jwt.verify(token, JWT_SECRET);
+
+      // 1. Try to find in Admin collection first (common for dashboard)
+      const Admin = (await import("../models/Admin.js")).default;
+      const admin = await Admin.findById(decoded.id).select("-password");
+
+      if (admin) {
+        req.admin = admin;
+        req.user = admin; // Attach to req.user as well for compatibility with standard controllers
+        req.authType = "admin";
+        return next();
+      }
+
+      // 2. Try to find in User collection
+      const user = await User.findById(decoded.id).select("-password");
+      if (user) {
+        req.user = user;
+        req.authType = "user";
+        return next();
+      }
+
+      return res.status(401).json({ message: "Not authorized, account not found" });
+    } catch (error) {
+      console.error("Unified Auth error:", error);
+      res.status(401).json({ message: "Not authorized, token failed" });
+    }
+  }
+
+  if (!token) {
+    res.status(401).json({ message: "Not authorized, no token" });
+  }
+};

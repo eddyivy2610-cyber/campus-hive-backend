@@ -1,13 +1,13 @@
 import { Router } from "express";
 import Notification from "../models/Notification.js";
-import { protect } from "../utils/auth.js";
+import { unifiedAuth } from "../utils/auth.js";
 
 const router = Router();
 
 /**
  * Get all notifications for current user
  */
-router.get("/", protect, async (req, res) => {
+router.get("/", unifiedAuth, async (req, res) => {
     try {
         const notifications = await Notification.find({ recipient: req.user._id })
             .sort({ createdAt: -1 })
@@ -32,7 +32,7 @@ router.get("/", protect, async (req, res) => {
 /**
  * Mark all as read
  */
-router.patch("/read-all", protect, async (req, res) => {
+router.patch("/read-all", unifiedAuth, async (req, res) => {
     try {
         await Notification.updateMany(
             { recipient: req.user._id, read: false },
@@ -48,7 +48,7 @@ router.patch("/read-all", protect, async (req, res) => {
 /**
  * Mark single as read
  */
-router.patch("/:id/read", protect, async (req, res) => {
+router.patch("/:id/read", unifiedAuth, async (req, res) => {
     try {
         const notification = await Notification.findOneAndUpdate(
             { _id: req.params.id, recipient: req.user._id },
