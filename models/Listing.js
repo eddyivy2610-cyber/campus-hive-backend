@@ -49,8 +49,8 @@ const ListingSchema = new Schema(
         },
         status: {
             type: String,
-            enum: ["active", "sold", "paused", "pending", "deleted"],
-            default: "active",
+            enum: ["active", "sold", "paused", "pending", "rejected", "deleted"],
+            default: "pending",
             index: true
         },
         inventory: {

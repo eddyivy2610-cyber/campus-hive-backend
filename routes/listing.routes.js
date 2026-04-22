@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getActiveListings, getAllListingsAdmin, createListing, getUserListings, getListingById } from "../controllers/listing.controller.js";
+import { getActiveListings, getAllListingsAdmin, createListing, getUserListings, getListingById, adminApproveListing, adminRejectListing } from "../controllers/listing.controller.js";
 import { protect } from "../utils/auth.js";
 
 const router = Router();
@@ -12,5 +12,7 @@ router.get("/user/all", protect, getUserListings);
 
 // Admin / Internal access
 router.get("/admin/all", protect, getAllListingsAdmin);
+router.put("/admin/approve/:id", protect, adminApproveListing);
+router.put("/admin/reject/:id", protect, adminRejectListing);
 
 export default router;

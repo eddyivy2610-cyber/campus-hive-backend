@@ -1,12 +1,19 @@
 import Listing from "../models/Listing.js";
 import User from "../models/User.js";
+import Notification from "../models/Notification.js";
+import AdminLog from "../models/AdminLog.js";
+import Admin from "../models/Admin.js";
 
 // --- Admin Endpoints ---
 
 // Get all listings for admin dashboard
 export const getAllListingsAdmin = async (req, res) => {
     try {
-        const listings = await Listing.find()
+        const { status } = req.query;
+        let query = {};
+        if (status) query.status = status;
+
+        const listings = await Listing.find(query)
             .populate("sellerId", "profile.displayName email")
             .sort({ createdAt: -1 });
 
@@ -17,6 +24,78 @@ export const getAllListingsAdmin = async (req, res) => {
         });
     } catch (error) {
         console.error("Get all listings admin error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+// Admin: Approve Listing
+export const adminApproveListing = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const listing = await Listing.findByIdAndUpdate(
+            id,
+            { status: "active" },
+            { new: true }
+        ).populate("sellerId", "email");
+
+        if (!listing) return res.status(404).json({ message: "Listing not found" });
+
+        await AdminLog.create({
+            type: "listing_approved",
+            message: `Listing '${listing.title}' approved`,
+            userId: req.user.id,
+            metadata: { listingId: id }
+        });
+
+        // Notify Seller
+        await Notification.create({
+            recipient: listing.sellerId._id,
+            type: "system",
+            title: "Listing Approved!",
+            message: `Your listing '${listing.title}' has been approved and is now live!`,
+            link: `/product/${listing.slug}`
+        });
+
+        res.status(200).json({ success: true, message: "Listing approved", data: listing });
+    } catch (error) {
+        console.error("Approve listing error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+// Admin: Reject Listing
+export const adminRejectListing = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        const listing = await Listing.findByIdAndUpdate(
+            id,
+            { status: "rejected" },
+            { new: true }
+        ).populate("sellerId", "email");
+
+        if (!listing) return res.status(404).json({ message: "Listing not found" });
+
+        await AdminLog.create({
+            type: "listing_rejected",
+            message: `Listing '${listing.title}' rejected. Reason: ${reason}`,
+            userId: req.user.id,
+            metadata: { listingId: id, reason }
+        });
+
+        // Notify Seller
+        await Notification.create({
+            recipient: listing.sellerId._id,
+            type: "system",
+            title: "Listing Rejected",
+            message: `Your listing '${listing.title}' was rejected. Reason: ${reason}`,
+            link: "/dashboard/products"
+        });
+
+        res.status(200).json({ success: true, message: "Listing rejected", data: listing });
+    } catch (error) {
+        console.error("Reject listing error:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 };
@@ -85,6 +164,18 @@ export const createListing = async (req, res) => {
         });
 
         await newListing.save();
+
+        // Notify Admins
+        const admins = await Admin.find({ status: "active" });
+        await Promise.all(admins.map(admin => 
+            Notification.create({
+                recipient: admin._id,
+                type: "verification_pending",
+                title: "New Listing Submission",
+                message: `New listing '${newListing.title}' submitted for review.`,
+                link: `/admin/listings`
+            })
+        ));
 
         res.status(201).json({ success: true, data: newListing });
     } catch (error) {
