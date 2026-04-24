@@ -148,7 +148,8 @@ export const refreshToken = async (req, res) => {
         const token = generateToken(user);
         res.status(200).json({ message: "Token refreshed", user, token });
     } catch (error) {
-        console.error("Refresh token error:", error);
+        console.error("Refresh token error for user:", req.user ? req.user.email : "unknown");
+        console.error(error.stack);
         res.status(500).json({ message: "Failed to refresh token", error: error.message });
     }
 }
