@@ -40,6 +40,8 @@ export const adminApproveListing = async (req, res) => {
 
         if (!listing) return res.status(404).json({ message: "Listing not found" });
 
+        console.log(`[Admin] Approving listing: ${id} (${listing.title})`);
+
         await AdminLog.create({
             type: "listing_approved",
             message: `Listing '${listing.title}' approved`,
@@ -53,7 +55,7 @@ export const adminApproveListing = async (req, res) => {
             type: "system",
             title: "Listing Approved!",
             message: `Your listing '${listing.title}' has been approved and is now live!`,
-            link: `/product/${listing.slug}`
+            link: `/listings/${listing._id}`
         });
 
         res.status(200).json({ success: true, message: "Listing approved", data: listing });
@@ -76,6 +78,8 @@ export const adminRejectListing = async (req, res) => {
         ).populate("sellerId", "email");
 
         if (!listing) return res.status(404).json({ message: "Listing not found" });
+
+        console.log(`[Admin] Rejecting listing: ${id} (${listing.title})`);
 
         await AdminLog.create({
             type: "listing_rejected",
