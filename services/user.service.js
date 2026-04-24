@@ -269,7 +269,7 @@ export const registerUserService = async (req) => {
         return {
             success: false,
             message: "Internal Server Error",
-            status: 500,
+            error: error.message, stack: error.stack, status: 500, error: error.message, stack: error.stack,
             error: error.message
         };
     }
@@ -300,7 +300,7 @@ export const getUserByIdService = async (userId) => {
         return {
             success: false,
             message: "Internal Server Error",
-            status: 500
+            status: 500, error: error.message, stack: error.stack
         };
     }
 };
@@ -406,7 +406,7 @@ export const updateUserService = async (userId, updateData, requestingUserId) =>
         return {
             success: false,
             message: "Internal Server Error",
-            status: 500
+            status: 500, error: error.message, stack: error.stack
         };
     }
 };
@@ -448,7 +448,7 @@ export const verifyEmailService = async (email, code) => {
         return {
             success: false,
             message: "Internal Server Error",
-            status: 500
+            status: 500, error: error.message, stack: error.stack
         };
     }
 };
@@ -488,7 +488,7 @@ export const updateLastLoginService = async (userId, ipAddress, deviceInfo) => {
         return {
             success: false,
             message: "Internal Server Error",
-            status: 500
+            status: 500, error: error.message, stack: error.stack
         };
     }
 };

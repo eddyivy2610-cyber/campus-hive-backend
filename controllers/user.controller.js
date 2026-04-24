@@ -35,7 +35,7 @@ export const getUser = async (req, res) => {
         const result = await getUserByIdService(userId);
         
         if (!result.success) {
-            return res.status(result.status).json({ message: result.message });
+            return res.status(result.status).json({ message: result.message, error: result.error, stack: result.stack });
         }
         
         res.status(200).json({ 

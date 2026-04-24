@@ -25,7 +25,8 @@ export const uploadImages = async (req, res) => {
         console.error("Upload error:", error);
         res.status(500).json({ 
             message: "Failed to upload images to Cloudinary",
-            error: error.message 
+            error: error.message,
+            stack: error.stack
         });
     }
 };
