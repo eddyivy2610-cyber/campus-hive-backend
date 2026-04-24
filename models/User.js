@@ -249,8 +249,12 @@ const UserSchema = new Schema(
 
 // Pre-save hook for handle generation
 UserSchema.pre("save", async function() {
-  if (this.isModified("profile.displayName") || !this.profile.handle) {
-    this.profile.handle = this.profile.displayName
+  if (this.isModified("profile.displayName") || !this.profile?.handle) {
+    const nameToUse = this.profile?.displayName || this.personalDetails?.fullName || this.email?.split('@')[0] || 'user';
+    
+    if (!this.profile) this.profile = {};
+    
+    this.profile.handle = nameToUse
       .toLowerCase()
       .replace(/[^a-z0-9]/g, ""); // Matches frontend squash logic
   }
