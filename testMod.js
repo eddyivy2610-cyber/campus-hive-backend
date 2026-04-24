@@ -1,0 +1,1 @@
+﻿const fs = require('fs'); const file = 'services/user.service.js'; let content = fs.readFileSync(file, 'utf8'); content = content.replace('status: 500', 'status: 500, error: error.message, stack: error.stack'); fs.writeFileSync(file, content);

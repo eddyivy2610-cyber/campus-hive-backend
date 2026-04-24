@@ -391,6 +391,7 @@ export const updateUserService = async (userId, updateData, requestingUserId) =>
         
     } catch (error) {
         console.error("Update user service error:", error);
+        fs.writeFileSync("error_log.txt", String(error.stack || error.message));
         
         // Handle validation errors
         if (error.name === "ValidationError") {

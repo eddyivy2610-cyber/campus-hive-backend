@@ -23,6 +23,7 @@ export const uploadImages = async (req, res) => {
         });
     } catch (error) {
         console.error("Upload error:", error);
+        import("fs").then(m => m.writeFileSync("upload_error_log.txt", String(error.stack || error.message)));
         res.status(500).json({ 
             message: "Failed to upload images to Cloudinary",
             error: error.message,
