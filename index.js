@@ -6,8 +6,11 @@ import compression from "compression";
 import rateLimit from "express-rate-limit";
 import routes from "./routes/index.js";
 import { connectDB } from "./utils/db.js";
+import { createServer } from "http";
+import { initSocket } from "./socket/index.js";
 
 const app = express();
+const httpServer = createServer(app);
 const port = process.env.PORT || 4000;
 
 // 1. Position CORS at the VERY TOP to handle preflights before any other logic
@@ -62,6 +65,10 @@ app.use((err, req, res, next) => {
 
 // Start Server after DB Connection
 await connectDB();
-app.listen(port, () => {
+
+// Initialize Socket.IO
+initSocket(httpServer, allowedOrigins);
+
+httpServer.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
