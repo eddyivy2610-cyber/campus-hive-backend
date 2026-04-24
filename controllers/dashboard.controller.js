@@ -3,6 +3,7 @@ import Order from "../models/Order.js";
 import Listing from "../models/Listing.js";
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
+import Follower from "../models/Follower.js";
 
 /**
  * Get seller dashboard stats
@@ -20,6 +21,8 @@ export const getSellerDashboardStats = async (req, res) => {
         const totalEarnings = totalEarningsData[0]?.total || 0;
         const totalOrders = totalEarningsData[0]?.count || 0;
         const activeListings = await Listing.countDocuments({ sellerId, status: "active" });
+        const followers = await Follower.countDocuments({ followingId: sellerId });
+
         const totalImpressions = await Listing.aggregate([
             { $match: { sellerId: new mongoose.Types.ObjectId(sellerId) } },
             { $group: { _id: null, totalViews: { $sum: "$views" } } }
@@ -100,7 +103,7 @@ export const getSellerDashboardStats = async (req, res) => {
                     totalEarnings,
                     totalOrders,
                     activeListings,
-                    followers: user.businessProfile?.followersCount || 0,
+                    followers,
                     rating: user.rating,
                     impressions
                 },
