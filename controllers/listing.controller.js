@@ -43,7 +43,7 @@ export const adminApproveListing = async (req, res) => {
         await AdminLog.create({
             type: "listing_approved",
             message: `Listing '${listing.title}' approved`,
-            userId: req.user.id,
+            userId: req.admin.id,
             metadata: { listingId: id }
         });
 
@@ -80,7 +80,7 @@ export const adminRejectListing = async (req, res) => {
         await AdminLog.create({
             type: "listing_rejected",
             message: `Listing '${listing.title}' rejected. Reason: ${reason}`,
-            userId: req.user.id,
+            userId: req.admin.id,
             metadata: { listingId: id, reason }
         });
 
@@ -110,7 +110,12 @@ export const getActiveListings = async (req, res) => {
         let query = { status: "active" };
         if (category) query.category = category;
         if (sellerId) query.sellerId = sellerId;
-        if (search) query.title = { $regex: search, $options: "i" };
+        if (search) {
+            query.$or = [
+                { title: { $regex: search, $options: "i" } },
+                { description: { $regex: search, $options: "i" } }
+            ];
+        }
         if (minPrice || maxPrice) {
             query.price = {};
             if (minPrice) query.price.$gte = Number(minPrice);
