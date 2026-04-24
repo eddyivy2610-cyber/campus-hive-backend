@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getActiveListings, getAllListingsAdmin, createListing, getUserListings, getListingById, adminApproveListing, adminRejectListing } from "../controllers/listing.controller.js";
+import { getActiveListings, getAllListingsAdmin, createListing, getUserListings, getListingById, adminApproveListing, adminRejectListing, updateListing } from "../controllers/listing.controller.js";
 import { protect, adminProtect } from "../utils/auth.js";
 
 const router = Router();
@@ -9,6 +9,7 @@ router.get("/active", getActiveListings);
 router.get("/single/:id", getListingById);
 router.post("/create", protect, createListing);
 router.get("/user/all", protect, getUserListings);
+router.put("/update/:id", protect, updateListing);
 
 // Admin / Internal access
 router.get("/admin/all", adminProtect, getAllListingsAdmin);

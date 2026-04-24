@@ -234,3 +234,37 @@ export const getListingById = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+// Update a listing (Seller only)
+export const updateListing = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const sellerId = req.user.id;
+
+        const listing = await Listing.findById(id);
+        if (!listing) return res.status(404).json({ message: "Listing not found" });
+
+        // Ensure user is the owner
+        if (listing.sellerId.toString() !== sellerId) {
+            return res.status(403).json({ message: "You are not authorized to update this listing" });
+        }
+
+        // Update fields
+        const updates = req.body;
+        
+        // If critical fields change, reset status to pending
+        if (updates.title || updates.price || updates.images) {
+            updates.status = "pending";
+        }
+
+        const updatedListing = await Listing.findByIdAndUpdate(
+            id,
+            { $set: updates },
+            { new: true }
+        );
+
+        res.status(200).json({ success: true, data: updatedListing });
+    } catch (error) {
+        console.error("Update listing error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
