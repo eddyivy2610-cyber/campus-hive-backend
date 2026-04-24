@@ -105,10 +105,11 @@ export const adminRejectListing = async (req, res) => {
 // Get active listings for marketplace
 export const getActiveListings = async (req, res) => {
     try {
-        const { category, search, minPrice, maxPrice } = req.query;
+        const { category, search, minPrice, maxPrice, sellerId } = req.query;
         
         let query = { status: "active" };
         if (category) query.category = category;
+        if (sellerId) query.sellerId = sellerId;
         if (search) query.title = { $regex: search, $options: "i" };
         if (minPrice || maxPrice) {
             query.price = {};
