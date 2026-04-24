@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Order from "../models/Order.js";
 import Listing from "../models/Listing.js";
 import Notification from "../models/Notification.js";
@@ -10,14 +11,30 @@ export const getSellerDashboardStats = async (req, res) => {
     try {
         const sellerId = req.user.id;
 
-        // 1. Fetch User (Seller) Stats from Profile
+        // 1. Calculate Real-time Stats
+        const totalEarningsData = await Order.aggregate([
+            { $match: { sellerId: new mongoose.Types.ObjectId(sellerId), status: "delivered" } },
+            { $group: { _id: null, total: { $sum: "$totalAmount" }, count: { $sum: 1 } } }
+        ]);
+
+        const totalEarnings = totalEarningsData[0]?.total || 0;
+        const totalOrders = totalEarningsData[0]?.count || 0;
+        const activeListings = await Listing.countDocuments({ sellerId, status: "active" });
+        const totalImpressions = await Listing.aggregate([
+            { $match: { sellerId: new mongoose.Types.ObjectId(sellerId) } },
+            { $group: { _id: null, totalViews: { $sum: "$views" } } }
+        ]);
+
+        const impressions = totalImpressions[0]?.totalViews || 0;
+
+        // Fetch User for achievements and other static info
         const user = await User.findById(sellerId).select("businessProfile rating achievements");
         if (!user) return res.status(404).json({ message: "User not found" });
 
-        // 2. Fetch Recent Activity (Recent Orders and Notifications)
+        // 2. Fetch Recent Activity
         const recentNotifications = await Notification.find({ recipient: sellerId })
             .sort({ createdAt: -1 })
-            .limit(5);
+            .limit(8);
 
         const recentOrders = await Order.find({ sellerId })
             .sort({ createdAt: -1 })
@@ -38,10 +55,9 @@ export const getSellerDashboardStats = async (req, res) => {
                 time: o.createdAt,
                 id: o._id
             }))
-        ].sort((a, b) => b.time - a.time).slice(0, 5);
+        ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 8);
 
-        // 3. Chart Data (Revenue over time - last 7 months or last 7 days)
-        // For now, let's group by month for the last 12 months
+        // 3. Chart Data
         const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const year = new Date().getFullYear();
         
@@ -51,8 +67,8 @@ export const getSellerDashboardStats = async (req, res) => {
             createdAt: { $gte: new Date(year, 0, 1) } 
         });
 
-        const monthlyStats = Array(12).fill(0).map((_, i) => ({
-            name: months[i],
+        const monthlyStats = months.map((m, i) => ({
+            name: m,
             sold: 0,
             qty: 0
         }));
@@ -70,25 +86,23 @@ export const getSellerDashboardStats = async (req, res) => {
             .select("title views price images");
 
         // 5. Category Distribution
-        const listings = await Listing.find({ sellerId }).select("category");
-        const categoryCounts = {};
-        listings.forEach(l => {
-            categoryCounts[l.category] = (categoryCounts[l.category] || 0) + 1;
-        });
-        const donutData = Object.entries(categoryCounts)
-            .map(([name, value]) => ({ name, value }))
-            .sort((a, b) => b.value - a.value);
+        const categoryStats = await Listing.aggregate([
+            { $match: { sellerId: new mongoose.Types.ObjectId(sellerId) } },
+            { $group: { _id: "$category", value: { $sum: 1 } } },
+            { $project: { name: "$_id", value: 1, _id: 0 } },
+            { $sort: { value: -1 } }
+        ]);
 
         res.status(200).json({
             success: true,
             data: {
                 stats: {
-                    totalEarnings: user.businessProfile.totalSalesAmount,
-                    totalOrders: user.businessProfile.soldItemsCount,
-                    activeListings: user.businessProfile.activeListingsCount,
-                    followers: user.businessProfile.followersCount,
+                    totalEarnings,
+                    totalOrders,
+                    activeListings,
+                    followers: user.businessProfile?.followersCount || 0,
                     rating: user.rating,
-                    impressions: listings.reduce((sum, l) => sum + (l.views || 0), 0)
+                    impressions
                 },
                 activity,
                 chartData: monthlyStats,
@@ -98,7 +112,7 @@ export const getSellerDashboardStats = async (req, res) => {
                     price: item.price,
                     image: item.images?.[0] || ""
                 })),
-                donutData,
+                donutData: categoryStats,
                 achievements: user.achievements || []
             }
         });
