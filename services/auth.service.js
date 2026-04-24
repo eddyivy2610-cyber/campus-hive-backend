@@ -165,21 +165,41 @@ export const updateUserPassword = async (req) => {
     return { message: "User password created successfully", status:200 };
 }
 
+import Listing from "../models/Listing.js";
+
 export const getProfileByHandleService = async (handle) => {
     const squashedHandle = handle.toLowerCase().replace(/[^a-z0-9]/g, "");
     let user = await User.findOne({ "profile.handle": squashedHandle });
-    if (user) return user;
-
-    const searchChars = squashedHandle.split('').join('\\s*');
-    user = await User.findOne({ 
-        "profile.displayName": { $regex: new RegExp(`^${searchChars}$`, "i") } 
-    });
-    if (user) return user;
-
-    if (handle.match(/^[0-9a-fA-F]{24}$/)) {
-        user = await User.findById(handle);
-        if (user) return user;
+    
+    if (!user) {
+        const searchChars = squashedHandle.split('').join('\\s*');
+        user = await User.findOne({ 
+            "profile.displayName": { $regex: new RegExp(`^${searchChars}$`, "i") } 
+        });
     }
 
-    return PROFILE_CATALOG.find(p => p.handle === handle);
+    if (!user && handle.match(/^[0-9a-fA-F]{24}$/)) {
+        user = await User.findById(handle);
+    }
+
+    if (!user) {
+        return PROFILE_CATALOG.find(p => p.handle === handle);
+    }
+
+    // Convert to plain object to modify
+    const userObj = user.toObject();
+
+    // Dynamically fetch active listings count
+    const activeListingsCount = await Listing.countDocuments({ 
+        sellerId: user._id, 
+        status: "active" 
+    });
+
+    // Merge into businessProfile
+    userObj.businessProfile = {
+        ...userObj.businessProfile,
+        activeListingsCount
+    };
+
+    return userObj;
 }

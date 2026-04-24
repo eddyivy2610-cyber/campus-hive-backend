@@ -13,6 +13,7 @@ import uploadRoutes from "./upload.routes.js";
 import onboardingRoutes from "./onboarding.routes.js";
 import notificationRoutes from "./notification.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
+import reviewRoutes from "./review.routes.js";
 
 const router = Router();
 
@@ -33,5 +34,6 @@ router.use("/admin/auth", adminAuthRoutes);
 router.use("/admin/logs", adminLogsRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/dashboard", dashboardRoutes);
+router.use("/reviews", reviewRoutes);
 
 export default router;
