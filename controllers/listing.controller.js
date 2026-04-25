@@ -127,7 +127,7 @@ export const getActiveListings = async (req, res) => {
         }
 
         const listings = await Listing.find(query)
-            .populate("sellerId", "profile.displayName profile.avatar")
+            .populate("sellerId", "profile.displayName profile.avatar profile.handle businessProfile personalDetails studentStatus")
             .sort({ createdAt: -1 });
 
         res.status(200).json({ success: true, data: listings });
@@ -222,7 +222,7 @@ export const getListingById = async (req, res) => {
                 { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }, 
                 { slug: id }
             ] 
-        }).populate("sellerId", "profile studentStatus email");
+        }).populate("sellerId", "profile studentStatus businessProfile personalDetails email");
 
         if (!listing) {
             return res.status(404).json({ message: "Listing not found" });
