@@ -64,6 +64,17 @@ export const initSocket = (httpServer, allowedOrigins) => {
             }
         });
 
+        // Negotiation Events
+        socket.on("negotiation_event", (data) => {
+            // data: { type, conversationId, receiverId, ...details }
+            if (data.receiverId) {
+                io.to(data.receiverId).emit("negotiation_update", {
+                    ...data,
+                    senderId: userId
+                });
+            }
+        });
+
         socket.on("disconnect", () => {
             userSockets.delete(userId);
             io.emit("user_offline", { userId });

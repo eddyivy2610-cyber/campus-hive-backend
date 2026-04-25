@@ -35,6 +35,11 @@ const ConversationSchema = new Schema(
         },
         negotiation: {
             id: String,
+            trackingRef: {
+                type: String,
+                unique: true,
+                sparse: true
+            },
             status: {
                 type: String,
                 enum: ["active", "completed", "ended", "none"],
