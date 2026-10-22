@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Review from "../models/Review.js";
 import User from "../models/User.js";
 import Order from "../models/Order.js";
@@ -17,9 +18,19 @@ export const createReview = async (req, res) => {
             return res.status(401).json({ message: "Authentication required" });
         }
 
-        const { sellerId, rating, comment, listingId, orderId } = req.body;
+        // NOTE: client-supplied sellerId is intentionally ignored. The reviewed seller
+        // is always derived from the order, never trusted from the request body.
+        const { rating, comment, listingId, orderId } = req.body;
 
-        if (!rating || !comment) {
+        // A review must always be tied to a real transaction. Without an orderId the
+        // eligibility checks below cannot run, so the request is rejected outright.
+        if (!orderId || typeof orderId !== "string" || !mongoose.Types.ObjectId.isValid(orderId)) {
+            return res.status(400).json({
+                message: "A valid orderId is required. Reviews can only be left for delivered orders.",
+            });
+        }
+
+        if (!rating || !comment || typeof comment !== "string" || !comment.trim()) {
             return res.status(400).json({ message: "Rating and comment are required" });
         }
 
@@ -28,30 +39,26 @@ export const createReview = async (req, res) => {
             return res.status(400).json({ message: "Rating must be an integer between 1 and 5" });
         }
 
-        // Eligibility verification if orderId is provided
-        let targetSellerId = sellerId;
-        if (orderId) {
-            const order = await Order.findById(orderId);
-            if (!order) {
-                return res.status(404).json({ message: "Order not found" });
-            }
-            if (order.buyerId.toString() !== reviewerId.toString()) {
-                return res.status(403).json({ message: "Only the buyer can review this order" });
-            }
-            if (order.status !== "delivered") {
-                return res.status(400).json({ message: "Order must be delivered before review" });
-            }
-            targetSellerId = order.sellerId;
-
-            // Duplicate check
-            const existing = await Review.findOne({ reviewerId, orderId });
-            if (existing) {
-                return res.status(409).json({ message: "You have already reviewed this transaction" });
-            }
+        // Eligibility verification (always enforced)
+        const order = await Order.findById(orderId);
+        if (!order) {
+            return res.status(404).json({ message: "Order not found" });
+        }
+        if (!order.buyerId || order.buyerId.toString() !== reviewerId.toString()) {
+            return res.status(403).json({ message: "Only the buyer can review this order" });
+        }
+        if (order.status !== "delivered") {
+            return res.status(400).json({ message: "Order must be delivered before review" });
+        }
+        const targetSellerId = order.sellerId;
+        if (!targetSellerId) {
+            return res.status(400).json({ message: "Order has no seller to review" });
         }
 
-        if (!targetSellerId) {
-            return res.status(400).json({ message: "Seller ID or valid orderId is required" });
+        // Duplicate check (unique index is the backstop; see 11000 handler below)
+        const existing = await Review.findOne({ reviewerId, orderId });
+        if (existing) {
+            return res.status(409).json({ message: "You have already reviewed this transaction" });
         }
 
         if (targetSellerId.toString() === reviewerId.toString()) {
@@ -64,7 +71,7 @@ export const createReview = async (req, res) => {
             rating: numRating,
             comment: comment.trim(),
             listingId: listingId || undefined,
-            orderId: orderId || undefined,
+            orderId,
             status: "published",
             schemaVersion: 1,
         });
