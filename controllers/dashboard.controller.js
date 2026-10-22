@@ -10,7 +10,16 @@ import Follower from "../models/Follower.js";
  */
 export const getSellerDashboardStats = async (req, res) => {
     try {
-        const sellerId = req.user.id;
+        // Enforce deprecation headers and private caching on legacy stats endpoint
+        res.setHeader("X-API-Deprecated", "true");
+        res.setHeader("X-API-Replacement", "/api/dashboard/seller-stats");
+        res.setHeader("Cache-Control", "private, no-cache, no-store, max-age=0, must-revalidate");
+
+        // STRICT IDENTITY: Always derive seller from verified token, never client query or body
+        const sellerId = req.user?.id || req.user?._id;
+        if (!sellerId) {
+            return res.status(401).json({ message: "Authentication required" });
+        }
 
         // 1. Calculate Real-time Stats
         const totalEarningsData = await Order.aggregate([

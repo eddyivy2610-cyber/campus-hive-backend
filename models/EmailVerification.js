@@ -21,6 +21,16 @@ const EmailVerificationSchema = new mongoose.Schema(
       required: true,
     },
 
+    attempts: {
+      type: Number,
+      default: 0,
+    },
+
+    lastSentAt: {
+      type: Date,
+      default: Date.now,
+    },
+
     expiresAt: {
       type: Date,
       required: true,
@@ -30,10 +40,21 @@ const EmailVerificationSchema = new mongoose.Schema(
     verifiedAt: {
       type: Date,
     },
+
+    schemaVersion: {
+      type: Number,
+      default: 1,
+      required: true,
+      index: true,
+    },
   },
-  { timestamps: true }
+  { timestamps: true, strict: true }
 );
 
-const EmailVerification = mongoose.model("EmailVerification", EmailVerificationSchema);
+EmailVerificationSchema.pre(["updateOne", "updateMany", "findOneAndUpdate", "findByIdAndUpdate"], function () {
+  this.setOptions({ runValidators: true });
+});
+
+const EmailVerification = mongoose.models.EmailVerification || mongoose.model("EmailVerification", EmailVerificationSchema);
 
 export default EmailVerification;

@@ -53,11 +53,22 @@ const notificationSchema = new mongoose.Schema(
       type: Object,
       default: {},
     },
+    schemaVersion: {
+      type: Number,
+      default: 1,
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
+    strict: true,
   }
 );
+
+notificationSchema.pre(["updateOne", "updateMany", "findOneAndUpdate", "findByIdAndUpdate"], function () {
+  this.setOptions({ runValidators: true });
+});
 
 const Notification = mongoose.models.Notification || mongoose.model("Notification", notificationSchema);
 

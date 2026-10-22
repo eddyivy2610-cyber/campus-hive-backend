@@ -1,32 +1,17 @@
-import { registerUserService, getUserByIdService, updateUserService } from "../services/user.service.js";
 import User from "../models/User.js";
-import { generateToken } from "../utils/auth.js";
+import { getUserByIdService } from "../services/user.service.js";
 
-export const register = async (req, res) => {
-    try {
-        const result = await registerUserService(req);
-        
-        if (!result.success) {
-            return res.status(result.status).json({ 
-                message: result.message,
-                ...(result.errors && { errors: result.errors }),
-                ...(result.error && { error: result.error })
-            });
-        }
-        
-        const token = generateToken(result.data);
-        res.status(201).json({ 
-            message: result.message, 
-            data: result.data,
-            token
-        });
-    } catch (error) {
-        console.error("Registration error:", error);
-        res.status(500).json({ 
-            message: "Internal Server Error", 
-            error: process.env.NODE_ENV === "development" ? error.message : undefined
-        });
-    }
+// ============================================================
+// READ-ONLY USER CONTROLLERS
+// Express is read-only on users. Next.js owns all user writes.
+// ============================================================
+
+export const register = async (_req, res) => {
+    return res.status(405).json({
+        success: false,
+        error: "METHOD_NOT_ALLOWED",
+        message: "User registration is owned exclusively by Next.js API (/api/auth/register).",
+    });
 };
 
 export const getUser = async (req, res) => {
@@ -51,26 +36,12 @@ export const getUser = async (req, res) => {
     }
 };
 
-export const updateUser = async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const result = await updateUserService(userId, req.body, req.user?._id);
-        
-        if (!result.success) {
-            return res.status(result.status).json({ message: result.message });
-        }
-        
-        res.status(200).json({ 
-            message: result.message, 
-            data: result.data 
-        });
-    } catch (error) {
-        console.error("Update user error:", error);
-        res.status(500).json({ 
-            message: "Internal Server Error",
-            error: process.env.NODE_ENV === "development" ? error.message : undefined
-        });
-    }
+export const updateUser = async (_req, res) => {
+    return res.status(405).json({
+        success: false,
+        error: "METHOD_NOT_ALLOWED",
+        message: "User write operations are owned exclusively by Next.js API.",
+    });
 };
 
 export const getAllUsers = async (req, res) => {

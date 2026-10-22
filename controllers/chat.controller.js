@@ -1,46 +1,142 @@
+import mongoose from "mongoose";
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import AdminLog from "../models/AdminLog.js";
 import Listing from "../models/Listing.js";
 
-// Fetch user's conversation list
+// Fetch user's conversation list (Caller can only fetch their own conversations)
 export const getUserConversations = async (req, res) => {
     try {
         const { userId } = req.params;
-        const conversations = await Conversation.find({ participants: userId })
+        const authenticatedUserId = String(req.user?._id || req.user?.id || "");
+
+        // Enforce: Requested userId MUST equal authenticated caller's identity
+        if (!authenticatedUserId || String(userId) !== authenticatedUserId) {
+            return res.status(403).json({ message: "Forbidden: Cannot access another user's conversations" });
+        }
+
+        const { cursor, limit: limitParam } = req.query;
+        const limit = Math.min(50, Math.max(1, parseInt(limitParam || "30", 10)));
+        const convFilter = {
+            participants: authenticatedUserId,
+            status: "active",
+        };
+
+        if (cursor) {
+            try {
+                const raw = Buffer.from(cursor, "base64url").toString("utf-8");
+                const [timeStr, idStr] = raw.split("::");
+                const time = new Date(timeStr);
+                if (isNaN(time.getTime()) || !mongoose.isValidObjectId(idStr)) {
+                    return res.status(400).json({ message: "Invalid cursor parameter" });
+                }
+                const parsedId = new mongoose.Types.ObjectId(idStr);
+                convFilter.$or = [
+                    { "lastMessage.time": { $lt: time } },
+                    { "lastMessage.time": time, _id: { $lt: parsedId } }
+                ];
+            } catch {
+                return res.status(400).json({ message: "Invalid cursor parameter" });
+            }
+        }
+
+        const conversations = await Conversation.find(convFilter)
             .populate("participants", "profile.displayName profile.avatar personalDetails.fullName email businessProfile.activeListingsCount businessProfile.soldItemsCount createdAt")
             .populate("listingId", "title price images status")
-            .sort({ updatedAt: -1 });
+            .sort({ "lastMessage.time": -1, _id: -1 })
+            .limit(limit);
 
-        res.status(200).json({ success: true, data: conversations });
+        const nextCursor = conversations.length === limit
+            ? Buffer.from(`${(conversations[conversations.length - 1].lastMessage?.time || new Date()).toISOString()}::${conversations[conversations.length - 1]._id}`).toString("base64url")
+            : null;
+
+        res.status(200).json({ success: true, data: conversations, nextCursor });
     } catch (error) {
         console.error("Get conversations error:", error);
         res.status(500).json({ message: "Internal server error", error: error.message });
     }
 };
 
-// Fetch messages for a specific conversation
+// Fetch messages for a specific conversation (Checks participant membership with keyset pagination)
 export const getMessages = async (req, res) => {
     try {
         const { conversationId } = req.params;
-        const messages = await Message.find({ conversationId })
-            .populate("senderId", "profile.displayName profile.avatar")
-            .sort({ createdAt: 1 });
+        const authenticatedUserId = String(req.user?._id || req.user?.id || "");
 
-        res.status(200).json({ success: true, data: messages });
+        const conversation = await Conversation.findById(conversationId);
+        if (!conversation) {
+            return res.status(404).json({ message: "Conversation not found" });
+        }
+
+        // Enforce membership check: Non-members get 404 Not Found to prevent enumeration
+        const isParticipant = (conversation.participants || []).some(
+            (p) => String(p._id || p) === authenticatedUserId
+        );
+        if (!isParticipant) {
+            return res.status(404).json({ message: "Conversation not found" });
+        }
+
+        const { cursor, limit: limitParam } = req.query;
+        const limit = Math.min(100, Math.max(1, parseInt(limitParam || "50", 10)));
+        const messageFilter = { conversationId };
+
+        if (cursor) {
+            try {
+                const raw = Buffer.from(cursor, "base64url").toString("utf-8");
+                const [timeStr, idStr] = raw.split("::");
+                const time = new Date(timeStr);
+                if (isNaN(time.getTime()) || !mongoose.isValidObjectId(idStr)) {
+                    return res.status(400).json({ message: "Invalid cursor parameter" });
+                }
+                const parsedId = new mongoose.Types.ObjectId(idStr);
+                messageFilter.$or = [
+                    { createdAt: { $lt: time } },
+                    { createdAt: time, _id: { $lt: parsedId } }
+                ];
+            } catch {
+                return res.status(400).json({ message: "Invalid cursor parameter" });
+            }
+        }
+
+        const messages = await Message.find(messageFilter)
+            .populate("senderId", "profile.displayName profile.avatar")
+            .sort({ createdAt: -1, _id: -1 })
+            .limit(limit);
+
+        const nextCursor = messages.length === limit
+            ? Buffer.from(`${messages[messages.length - 1].createdAt.toISOString()}::${messages[messages.length - 1]._id}`).toString("base64url")
+            : null;
+
+        res.status(200).json({ success: true, data: messages.reverse(), nextCursor });
     } catch (error) {
         console.error("Get messages error:", error);
         res.status(500).json({ message: "Internal server error", error: error.message });
     }
 };
 
-// Send a new message
+// Send a new message (Derives senderId from authenticated session, ignores body senderId, checks membership)
 export const sendMessage = async (req, res) => {
     try {
-        const { conversationId, senderId, text, type, listingId } = req.body;
+        const { conversationId, text, type, listingId } = req.body;
+        // Strictly derive senderId from authenticated user; ignore any body senderId
+        const senderId = req.user?._id || req.user?.id;
+        const authenticatedUserId = String(senderId || "");
 
-        if (!conversationId || !senderId || !text) {
-            return res.status(400).json({ message: "conversationId, senderId, and text are required" });
+        if (!conversationId || !text) {
+            return res.status(400).json({ message: "conversationId and text are required" });
+        }
+
+        const conversation = await Conversation.findById(conversationId);
+        if (!conversation) {
+            return res.status(404).json({ message: "Conversation not found" });
+        }
+
+        // Enforce membership check: Only legitimate participants can post messages
+        const isParticipant = (conversation.participants || []).some(
+            (p) => String(p._id || p) === authenticatedUserId
+        );
+        if (!isParticipant) {
+            return res.status(404).json({ message: "Conversation not found" });
         }
 
         const newMessage = new Message({
@@ -75,10 +171,12 @@ export const sendMessage = async (req, res) => {
 // Find or create a conversation between two users (for "Message Seller" button)
 export const getOrCreateConversation = async (req, res) => {
     try {
-        const { userId, otherUserId, listingId, initialMessage } = req.body;
+        const { otherUserId, listingId, initialMessage } = req.body;
+        // Strictly derive authenticated user identity from session
+        const userId = req.user?._id || req.user?.id;
 
         if (!userId || !otherUserId) {
-            return res.status(400).json({ message: "userId and otherUserId are required" });
+            return res.status(400).json({ message: "otherUserId is required" });
         }
 
         // Check if a conversation already exists between these two users
@@ -139,16 +237,21 @@ export const getOrCreateConversation = async (req, res) => {
 // Request to end a negotiation
 export const endNegotiation = async (req, res) => {
     try {
-        const { conversationId, userId, action } = req.body; // action: 'request_close' or 'cancel'
+        const { conversationId, action } = req.body; // action: 'request_close' or 'cancel'
+        const authenticatedUserId = String(req.user?._id || req.user?.id || "");
 
         const conversation = await Conversation.findById(conversationId);
         if (!conversation) return res.status(404).json({ message: "Conversation not found" });
 
+        const isParticipant = (conversation.participants || []).some(
+            (p) => String(p._id || p) === authenticatedUserId
+        );
+        if (!isParticipant) {
+            return res.status(404).json({ message: "Conversation not found" });
+        }
+
         if (action === "request_close") {
-            // Update status to pending closure or similar if needed, 
-            // for now we'll just send a system message via socket/frontend
-            // but we can track who requested it
-            conversation.negotiation.closeRequestedBy = userId;
+            conversation.negotiation.closeRequestedBy = authenticatedUserId;
             await conversation.save();
         }
 
@@ -162,9 +265,17 @@ export const endNegotiation = async (req, res) => {
 export const confirmEndNegotiation = async (req, res) => {
     try {
         const { conversationId, status } = req.body; // status: 'completed' or 'ended'
+        const authenticatedUserId = String(req.user?._id || req.user?.id || "");
 
         const conversation = await Conversation.findById(conversationId);
         if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+
+        const isParticipant = (conversation.participants || []).some(
+            (p) => String(p._id || p) === authenticatedUserId
+        );
+        if (!isParticipant) {
+            return res.status(404).json({ message: "Conversation not found" });
+        }
 
         conversation.negotiation.status = status;
         conversation.negotiation.endedAt = new Date();

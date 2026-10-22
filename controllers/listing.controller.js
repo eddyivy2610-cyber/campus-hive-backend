@@ -1,10 +1,11 @@
 import Listing from "../models/Listing.js";
-import User from "../models/User.js";
-import Notification from "../models/Notification.js";
-import AdminLog from "../models/AdminLog.js";
-import Admin from "../models/Admin.js";
 
-// --- Admin Endpoints ---
+// ============================================================
+// READ-ONLY LISTING CONTROLLERS
+// Express is read-only on listings. Next.js owns all listing writes.
+// ============================================================
+
+// --- Admin Endpoints (Read-Only) ---
 
 // Get all listings for admin dashboard
 export const getAllListingsAdmin = async (req, res) => {
@@ -28,83 +29,25 @@ export const getAllListingsAdmin = async (req, res) => {
     }
 };
 
-// Admin: Approve Listing
-export const adminApproveListing = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const listing = await Listing.findByIdAndUpdate(
-            id,
-            { status: "active" },
-            { new: true }
-        ).populate("sellerId", "email");
-
-        if (!listing) return res.status(404).json({ message: "Listing not found" });
-
-        console.log(`[Admin] Approving listing: ${id} (${listing.title})`);
-
-        await AdminLog.create({
-            type: "listing_approved",
-            message: `Listing '${listing.title}' approved`,
-            userId: req.admin.id,
-            metadata: { listingId: id }
-        });
-
-        // Notify Seller
-        await Notification.create({
-            recipient: listing.sellerId._id,
-            type: "system",
-            title: "Listing Approved!",
-            message: `Your listing '${listing.title}' has been approved and is now live!`,
-            link: `/listings/${listing._id}`
-        });
-
-        res.status(200).json({ success: true, message: "Listing approved", data: listing });
-    } catch (error) {
-        console.error("Approve listing error:", error);
-        res.status(500).json({ message: "Internal server error" });
-    }
+// Admin: Approve Listing (Disallowed in Express — owned by Next.js)
+export const adminApproveListing = async (_req, res) => {
+    return res.status(405).json({
+        success: false,
+        error: "METHOD_NOT_ALLOWED",
+        message: "Listing moderation is owned exclusively by Next.js API (/api/admin/listings/[id]).",
+    });
 };
 
-// Admin: Reject Listing
-export const adminRejectListing = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { reason } = req.body;
-
-        const listing = await Listing.findByIdAndUpdate(
-            id,
-            { status: "rejected" },
-            { new: true }
-        ).populate("sellerId", "email");
-
-        if (!listing) return res.status(404).json({ message: "Listing not found" });
-
-        console.log(`[Admin] Rejecting listing: ${id} (${listing.title})`);
-
-        await AdminLog.create({
-            type: "listing_rejected",
-            message: `Listing '${listing.title}' rejected. Reason: ${reason}`,
-            userId: req.admin.id,
-            metadata: { listingId: id, reason }
-        });
-
-        // Notify Seller
-        await Notification.create({
-            recipient: listing.sellerId._id,
-            type: "system",
-            title: "Listing Rejected",
-            message: `Your listing '${listing.title}' was rejected. Reason: ${reason}`,
-            link: "/dashboard/products"
-        });
-
-        res.status(200).json({ success: true, message: "Listing rejected", data: listing });
-    } catch (error) {
-        console.error("Reject listing error:", error);
-        res.status(500).json({ message: "Internal server error" });
-    }
+// Admin: Reject Listing (Disallowed in Express — owned by Next.js)
+export const adminRejectListing = async (_req, res) => {
+    return res.status(405).json({
+        success: false,
+        error: "METHOD_NOT_ALLOWED",
+        message: "Listing moderation is owned exclusively by Next.js API (/api/admin/listings/[id]).",
+    });
 };
 
-// --- General Endpoints ---
+// --- General Endpoints (Read-Only) ---
 
 // Get active listings for marketplace
 export const getActiveListings = async (req, res) => {
@@ -137,67 +80,19 @@ export const getActiveListings = async (req, res) => {
     }
 };
 
-// Create a new listing
-export const createListing = async (req, res) => {
-    try {
-        const { title, description, price, category, condition, images, location, ...details } = req.body;
-        const sellerId = req.user.id;
-
-        // Verify seller status
-        const seller = await User.findById(sellerId).select("role studentStatus profile");
-        if (!seller || (seller.role !== "seller" && seller.role !== "pro")) {
-            return res.status(403).json({ message: "Only verified sellers can create listings" });
-        }
-        
-        // Use matches existing logic if student verification is enabled
-        // Allowing both pro and verified students
-        const isStudentVerified = seller.studentStatus?.isVerified || seller.role === "pro";
-        if (!isStudentVerified) {
-            return res.status(403).json({ message: "Student verification required to create listings. Please check your profile status." });
-        }
-        
-        const slug = title.toLowerCase().split(' ').join('-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
-        const listingCode = "LST-" + Math.floor(1000 + Math.random() * 9000) + "-CH";
-
-        const newListing = new Listing({
-            sellerId,
-            title,
-            slug,
-            description,
-            price: Number(price),
-            category,
-            condition,
-            images,
-            location,
-            listingCode,
-            ...details
-        });
-
-        await newListing.save();
-
-        // Notify Admins
-        const admins = await Admin.find({ status: "active" });
-        await Promise.all(admins.map(admin => 
-            Notification.create({
-                recipient: admin._id,
-                type: "verification_pending",
-                title: "New Listing Submission",
-                message: `New listing '${newListing.title}' submitted for review.`,
-                link: `/admin/listings`
-            })
-        ));
-
-        res.status(201).json({ success: true, data: newListing });
-    } catch (error) {
-        console.error("Create listing error:", error);
-        res.status(500).json({ message: "Internal server error" });
-    }
+// Create a new listing (Disallowed in Express — owned by Next.js)
+export const createListing = async (_req, res) => {
+    return res.status(405).json({
+        success: false,
+        error: "METHOD_NOT_ALLOWED",
+        message: "Listing creation is owned exclusively by Next.js API (/api/listings).",
+    });
 };
 
-// Get listings for current authenticated user
+// Get listings for current authenticated user (Read-Only)
 export const getUserListings = async (req, res) => {
     try {
-        const sellerId = req.user.id;
+        const sellerId = req.user.id || req.user._id;
         const listings = await Listing.find({ sellerId }).sort({ createdAt: -1 });
 
         res.status(200).json({
@@ -211,18 +106,19 @@ export const getUserListings = async (req, res) => {
     }
 };
 
-// Get a single listing by ID/Slug
+// Get a single listing by ID/Slug (Read-Only)
 export const getListingById = async (req, res) => {
     try {
         const { id } = req.params;
         
-        // Find by ID or Slug
-        const listing = await Listing.findOne({ 
-            $or: [
-                { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }, 
-                { slug: id }
-            ] 
-        }).populate("sellerId", "profile studentStatus businessProfile personalDetails email");
+        // Find by ID or Slug, strictly whitelisting active listings for public marketplace
+        const isObjectId = Boolean(id && /^[0-9a-fA-F]{24}$/.test(id));
+        const query = {
+            status: "active",
+            $or: isObjectId ? [{ _id: id }, { slug: id }] : [{ slug: id }],
+        };
+
+        const listing = await Listing.findOne(query).populate("sellerId", "profile studentStatus businessProfile personalDetails email");
 
         if (!listing) {
             return res.status(404).json({ message: "Listing not found" });
@@ -234,37 +130,12 @@ export const getListingById = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
-// Update a listing (Seller only)
-export const updateListing = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const sellerId = req.user.id;
 
-        const listing = await Listing.findById(id);
-        if (!listing) return res.status(404).json({ message: "Listing not found" });
-
-        // Ensure user is the owner
-        if (listing.sellerId.toString() !== sellerId) {
-            return res.status(403).json({ message: "You are not authorized to update this listing" });
-        }
-
-        // Update fields
-        const updates = req.body;
-        
-        // If critical fields change, reset status to pending
-        if (updates.title || updates.price || updates.images) {
-            updates.status = "pending";
-        }
-
-        const updatedListing = await Listing.findByIdAndUpdate(
-            id,
-            { $set: updates },
-            { new: true }
-        );
-
-        res.status(200).json({ success: true, data: updatedListing });
-    } catch (error) {
-        console.error("Update listing error:", error);
-        res.status(500).json({ message: "Internal server error" });
-    }
+// Update a listing (Disallowed in Express — owned by Next.js)
+export const updateListing = async (_req, res) => {
+    return res.status(405).json({
+        success: false,
+        error: "METHOD_NOT_ALLOWED",
+        message: "Listing update is owned exclusively by Next.js API (/api/listings/[id]).",
+    });
 };

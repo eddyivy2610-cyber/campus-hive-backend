@@ -14,6 +14,8 @@ const AdminLogSchema = new Schema(
         "system",
         "report",
         "listing",
+        "listing_approved",
+        "listing_rejected",
       ],
     },
     message: {
@@ -28,9 +30,19 @@ const AdminLogSchema = new Schema(
       type: Object,
       default: {},
     },
+    schemaVersion: {
+      type: Number,
+      default: 1,
+      required: true,
+      index: true,
+    },
   },
-  { timestamps: true }
+  { timestamps: true, strict: true }
 );
+
+AdminLogSchema.pre(["updateOne", "updateMany", "findOneAndUpdate", "findByIdAndUpdate"], function () {
+  this.setOptions({ runValidators: true });
+});
 
 const AdminLog = mongoose.models.AdminLog || model("AdminLog", AdminLogSchema);
 export default AdminLog;

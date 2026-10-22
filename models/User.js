@@ -1,8 +1,9 @@
 import mongoose, { Schema, model } from "mongoose";
+import argon2 from "argon2";
 
 /**
- * User Model for Campus Hive.
- * Covers both Buyer and Seller (Vendor) roles with comprehensive profiles.
+ * User Model for Campus Hive (Express Backend).
+ * READ-ONLY on User collection. All mutations are owned exclusively by Next.js.
  */
 
 const UserSchema = new Schema(
@@ -10,6 +11,10 @@ const UserSchema = new Schema(
     // ============================================================
     // AUTHENTICATION & ACCOUNT
     // ============================================================
+    name: {
+      type: String,
+      trim: true,
+    },
     email: {
       type: String,
       required: [true, "Email is required"],
@@ -43,17 +48,15 @@ const UserSchema = new Schema(
     profile: {
       displayName: {
         type: String,
-        required: false, // Defaulting to handle/fullName initially
+        required: false,
         trim: true,
         minlength: [3, "Display name must be at least 3 characters"],
         maxlength: [50, "Display name cannot exceed 50 characters"],
       },
       handle: {
         type: String,
-        unique: true,
         lowercase: true,
         trim: true,
-        index: true,
       },
       bio: {
         type: String,
@@ -167,7 +170,7 @@ const UserSchema = new Schema(
       },
       description: {
         type: String,
-        maxlength: [2000], // Extended Bio
+        maxlength: [2000],
       },
       tags: {
         type: [String],
@@ -204,8 +207,8 @@ const UserSchema = new Schema(
     },
     achievements: [{
       name: String,
-      icon: String, // Lucide icon name
-      color: String, // Tailwind color class
+      icon: String,
+      color: String,
       type: {
         type: String,
         enum: ["Achievement", "System", "Legacy"],
@@ -230,14 +233,27 @@ const UserSchema = new Schema(
     },
     agreedToTerms: {
       type: Boolean,
-      required: true,
+      default: true,
     },
     emailVerified: { type: Boolean, default: false },
     lastLoginAt: Date,
     loginCount: { type: Number, default: 0 },
+    tokenVersion: {
+      type: Number,
+      default: 0,
+      required: true,
+      index: true,
+    },
+    schemaVersion: {
+      type: Number,
+      default: 1,
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
+    strict: true,
     toJSON: {
       transform: (doc, ret) => {
         delete ret.password;
@@ -247,29 +263,66 @@ const UserSchema = new Schema(
   }
 );
 
-// Pre-save hook for handle generation
-UserSchema.pre("save", async function() {
-  if (this.isModified("profile.displayName") || !this.profile?.handle) {
-    const nameToUse = this.profile?.displayName || this.personalDetails?.fullName || this.email?.split('@')[0] || 'user';
-    
-    if (!this.profile) this.profile = {};
-    
-    this.profile.handle = nameToUse
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, ""); // Matches frontend squash logic
+// Method to compare password using argon2 (read-only verification)
+UserSchema.methods.comparePassword = async function(enteredPassword) {
+  if (!this.password) return false;
+  try {
+    return await argon2.verify(this.password, enteredPassword);
+  } catch {
+    return false;
   }
-});
+};
 
 // Virtual for full profile URL
 UserSchema.virtual("profileUrl").get(function() {
   return `/users/${this._id}`;
 });
 
+// Read-only safe login metric method (no DB write in Express)
 UserSchema.methods.updateLastLogin = async function() {
   this.lastLoginAt = new Date();
-  this.loginCount += 1;
-  return this.save();
+  this.loginCount = (this.loginCount || 0) + 1;
+  return this;
 };
+
+// Unique partial index matching Next.js
+UserSchema.index(
+  { "profile.handle": 1 },
+  { unique: true, partialFilterExpression: { "profile.handle": { $type: "string" } } }
+);
+
+// ============================================================
+// SINGLE WRITER ENFORCEMENT: EXPRESS IS READ-ONLY ON USERS
+// Next.js owns all user writes (auth, registration, profiles, admin)
+// ============================================================
+export const USER_READ_ONLY_ERROR = "READ_ONLY_COLLECTION: Express backend is read-only on users. Write operations are owned exclusively by Next.js.";
+
+UserSchema.pre("save", function() {
+  throw new Error(USER_READ_ONLY_ERROR);
+});
+
+UserSchema.pre("insertMany", function() {
+  throw new Error(USER_READ_ONLY_ERROR);
+});
+
+const userWriteQueryOps = [
+  "updateOne",
+  "updateMany",
+  "findOneAndUpdate",
+  "findByIdAndUpdate",
+  "replaceOne",
+  "findOneAndReplace",
+  "deleteOne",
+  "deleteMany",
+  "findOneAndDelete",
+  "findByIdAndDelete",
+];
+
+userWriteQueryOps.forEach((op) => {
+  UserSchema.pre(op, function() {
+    throw new Error(USER_READ_ONLY_ERROR);
+  });
+});
 
 const User = mongoose.models.User || model("User", UserSchema);
 export default User;

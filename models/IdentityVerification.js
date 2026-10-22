@@ -51,18 +51,29 @@ const IdentityVerificationSchema = new Schema(
     review: {
       reviewedBy: {
         type: Types.ObjectId,
-        ref: "Admin",
+        ref: "User",
       },
       reviewedAt: Date,
       rejectionReason: String,
     },
 
     expiresAt: Date,
+    schemaVersion: {
+      type: Number,
+      default: 1,
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
+    strict: true,
   }
 );
+
+IdentityVerificationSchema.pre(["updateOne", "updateMany", "findOneAndUpdate", "findByIdAndUpdate"], function () {
+  this.setOptions({ runValidators: true });
+});
 
 const IdentityVerification = mongoose.models.IdentityVerification || model(
   "IdentityVerification",

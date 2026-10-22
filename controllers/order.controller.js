@@ -18,8 +18,13 @@ export const getAllOrdersAdmin = async (req, res) => {
 // Create a new order
 export const createOrder = async (req, res) => {
     try {
-        const { buyerId, sellerId, items, totalAmount, paymentMethod, fulfillmentMethod } = req.body;
+        const buyerId = req.user.id; // Strictly derive from authenticated user session
+        const { sellerId, items, totalAmount, paymentMethod, fulfillmentMethod } = req.body;
         
+        if (buyerId.toString() === sellerId?.toString()) {
+            return res.status(400).json({ message: "Self-ordering is not permitted" });
+        }
+
         const orderId = "ORD-" + Math.floor(100000 + Math.random() * 900000) + "-CH";
 
         const newOrder = new Order({

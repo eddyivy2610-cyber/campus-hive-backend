@@ -4,16 +4,18 @@ import { protect, adminProtect } from "../utils/auth.js";
 
 const router = Router();
 
-// Regular marketplace access
+// Regular marketplace access (READ-ONLY)
 router.get("/active", getActiveListings);
 router.get("/single/:id", getListingById);
-router.post("/create", protect, createListing);
 router.get("/user/all", protect, getUserListings);
-router.put("/update/:id", protect, updateListing);
 
-// Admin / Internal access
+// Admin / Internal access (READ-ONLY)
 router.get("/admin/all", adminProtect, getAllListingsAdmin);
-router.put("/admin/approve/:id", adminProtect, adminApproveListing);
-router.put("/admin/reject/:id", adminProtect, adminRejectListing);
+
+// Write endpoints (Owned exclusively by Next.js API)
+router.post("/create", createListing);
+router.put("/update/:id", updateListing);
+router.put("/admin/approve/:id", adminApproveListing);
+router.put("/admin/reject/:id", adminRejectListing);
 
 export default router;

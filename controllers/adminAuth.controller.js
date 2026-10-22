@@ -1,94 +1,56 @@
-import Admin from "../models/Admin.js";
-import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 import argon2 from "argon2";
+import { generateAdminToken } from "../utils/auth.js";
+import { env } from "../utils/env.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your_fallback_secret_key_change_in_production";
-const ADMIN_REGISTRATION_KEY = process.env.ADMIN_REGISTRATION_KEY || "hive-admin-2025";
-
-/**
- * Sign Up as Admin
- */
-export const adminSignUp = async (req, res) => {
-  try {
-    const { username, email, password, adminKey } = req.body;
-
-    // Verify admin registration key
-    if (adminKey !== ADMIN_REGISTRATION_KEY) {
-      return res.status(403).json({ message: "Invalid admin registration key." });
-    }
-
-    // Check if admin already exists
-    const adminExists = await Admin.findOne({ $or: [{ email }, { username }] });
-    if (adminExists) {
-      return res.status(400).json({ message: "Admin with this email or username already exists." });
-    }
-
-    // Hash password manually (consistent with User model strategy)
-    const hashedPassword = await argon2.hash(password);
-
-    // Create admin
-    const admin = await Admin.create({
-      username: username.toLowerCase().trim(),
-      email: email.toLowerCase().trim(),
-      password: hashedPassword,
-    });
-
-    if (admin) {
-      res.status(201).json({
-        message: "Admin registered successfully.",
-        admin: {
-          id: admin._id,
-          username: admin.username,
-          email: admin.email,
-        },
-      });
-    } else {
-      res.status(400).json({ message: "Invalid admin data." });
-    }
-  } catch (error) {
-    console.error("Admin Signup Error DETAILS:", {
-      message: error.message,
-      stack: error.stack,
-      body: { ...req.body, password: "[REDACTED]" }
-    });
-    res.status(500).json({ message: "Internal server error", error: error.message });
-  }
+export const getAdminRegistrationKey = () => {
+  return env.ADMIN_REGISTRATION_KEY;
 };
 
 /**
- * Sign In as Admin
+ * Sign Up as Admin (Owned exclusively by Next.js)
+ */
+export const adminSignUp = async (_req, res) => {
+  return res.status(405).json({
+    success: false,
+    error: "METHOD_NOT_ALLOWED",
+    message: "Admin registration is owned exclusively by Next.js API (/api/admin/auth/signup).",
+  });
+};
+
+/**
+ * Sign In as Admin (Read-only on User collection)
  */
 export const adminSignIn = async (req, res) => {
   try {
     const { identity, password } = req.body;
 
-    // Find admin by username or email
-    const admin = await Admin.findOne({
+    const cleanIdentity = String(identity || "").toLowerCase().trim();
+
+    // Find admin by username, handle or email in User collection
+    const admin = await User.findOne({
       $or: [
-        { email: identity.toLowerCase() },
-        { username: identity.toLowerCase() }
-      ]
+        { email: cleanIdentity },
+        { "profile.handle": cleanIdentity },
+        { "profile.displayName": cleanIdentity },
+      ],
+      role: "admin",
     }).select("+password");
 
     if (admin && (await admin.comparePassword(password))) {
-      // Update login metrics
+      // In-memory last login tracking (Express is strictly read-only on users)
       admin.lastLoginAt = new Date();
-      admin.loginCount += 1;
-      await admin.save();
+      admin.loginCount = (admin.loginCount || 0) + 1;
 
-      // Generate token
-      const token = jwt.sign(
-        { id: admin._id, email: admin.email, role: admin.role, isAdmin: true },
-        JWT_SECRET,
-        { expiresIn: "7d" }
-      );
+      // Generate token with the shared standard claims (iss, aud, sub, HS256)
+      const token = generateAdminToken(admin);
 
       res.status(200).json({
         message: "Logged in successfully.",
         token,
         user: {
           id: admin._id,
-          username: admin.username,
+          username: admin.profile?.handle || admin.profile?.displayName || admin.personalDetails?.fullName || "admin",
           email: admin.email,
           role: admin.role,
         },

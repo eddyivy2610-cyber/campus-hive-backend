@@ -29,9 +29,20 @@ const PhoneVerificationSchema = new mongoose.Schema(
     verifiedAt: {
       type: Date,
     },
+
+    schemaVersion: {
+      type: Number,
+      default: 1,
+      required: true,
+      index: true,
+    },
   },
-  { timestamps: true }
+  { timestamps: true, strict: true }
 );
+
+PhoneVerificationSchema.pre(["updateOne", "updateMany", "findOneAndUpdate", "findByIdAndUpdate"], function () {
+  this.setOptions({ runValidators: true });
+});
 
 const PhoneVerification =
   mongoose.models.PhoneVerification ||

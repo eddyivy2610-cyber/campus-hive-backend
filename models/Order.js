@@ -73,12 +73,23 @@ const OrderSchema = new Schema(
                 default: Date.now
             },
             comment: String
-        }]
+        }],
+        schemaVersion: {
+            type: Number,
+            default: 1,
+            required: true,
+            index: true
+        }
     },
     {
-        timestamps: true
+        timestamps: true,
+        strict: true
     }
 );
+
+OrderSchema.pre(["updateOne", "updateMany", "findOneAndUpdate", "findByIdAndUpdate"], function () {
+    this.setOptions({ runValidators: true });
+});
 
 const Order = mongoose.models.Order || model("Order", OrderSchema);
 export default Order;

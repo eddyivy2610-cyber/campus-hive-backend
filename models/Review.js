@@ -16,11 +16,12 @@ const ReviewSchema = new Schema(
         orderId: {
             type: Types.ObjectId,
             ref: "Order",
-            required: false, // Optional, can be a general review
+            required: false,
         },
         listingId: {
             type: Types.ObjectId,
             ref: "Listing",
+            index: true,
             required: false,
         },
         rating: {
@@ -41,31 +42,46 @@ const ReviewSchema = new Schema(
             enum: ["published", "hidden", "flagged"],
             default: "published",
         },
+        schemaVersion: {
+            type: Number,
+            default: 1,
+            required: true,
+            index: true,
+        },
     },
     {
         timestamps: true,
+        strict: true,
     }
 );
 
-// Update user rating aggregate on review save
-ReviewSchema.post("save", async function() {
-    const Review = this.constructor;
-    const stats = await Review.aggregate([
-        { $match: { sellerId: this.sellerId, status: "published" } },
-        {
-            $group: {
-                _id: "$sellerId",
-                avgRating: { $avg: "$rating" },
-                nRatings: { $sum: 1 },
-            },
-        },
-    ]);
+ReviewSchema.pre(["updateOne", "updateMany", "findOneAndUpdate", "findByIdAndUpdate"], function () {
+    this.setOptions({ runValidators: true });
+});
 
-    if (stats.length > 0) {
-        await mongoose.model("User").findByIdAndUpdate(this.sellerId, {
-            "rating.average": Math.round(stats[0].avgRating * 10) / 10,
-            "rating.count": stats[0].nRatings,
-        });
+// Update user rating aggregate on review save (gracefully handles read-only User collection in Express)
+ReviewSchema.post("save", async function() {
+    try {
+        const Review = this.constructor;
+        const stats = await Review.aggregate([
+            { $match: { sellerId: this.sellerId, status: "published" } },
+            {
+                $group: {
+                    _id: "$sellerId",
+                    avgRating: { $avg: "$rating" },
+                    nRatings: { $sum: 1 },
+                },
+            },
+        ]);
+
+        if (stats.length > 0) {
+            await mongoose.model("User").findByIdAndUpdate(this.sellerId, {
+                "rating.average": Math.round(stats[0].avgRating * 10) / 10,
+                "rating.count": stats[0].nRatings,
+            });
+        }
+    } catch {
+        // Express backend is read-only on users; user rating mutations are owned by Next.js
     }
 });
 

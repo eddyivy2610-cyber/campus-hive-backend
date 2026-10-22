@@ -4,6 +4,9 @@ import { protect } from "../utils/auth.js";
 
 const router = Router();
 
+// Enforce authentication on all chat endpoints
+router.use(protect);
+
 router.get("/user/:userId", getUserConversations);
 router.get("/:conversationId/messages", getMessages);
 router.post("/send", sendMessage);
