@@ -5,8 +5,10 @@
 	"main": "index.js",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"start": "node index.js",
-		"dev": "nodemon index.js"
+		"start": "ts-node --esm src/index.ts",
+		"dev": "nodemon --exec \"ts-node --esm\" src/index.ts",
+		"prisma:generate": "prisma generate",
+		"prisma:migrate": "prisma migrate dev"
 	},
 	"repository": {
 		"type": "git",
@@ -21,9 +23,11 @@
 	},
 	"homepage": "https://github.com/alimancs/campus-market-backend#readme",
 	"dependencies": {
+		"@prisma/client": "^7.10.1",
 		"argon2": "^0.44.0",
 		"bcrypt": "^6.0.0",
 		"compression": "latest",
+		"cookie-parser": "^1.4.7",
 		"cors": "^2.8.6",
 		"dotenv": "^17.3.1",
 		"express": "^5.2.1",
@@ -32,10 +36,23 @@
 		"helmet-csp": "^4.0.0",
 		"joi": "^18.0.2",
 		"mongoose": "^9.2.4",
-		"nodemailer": "^8.0.1"
+		"nodemailer": "^8.0.1",
+		"pg": "^8.23.1",
+		"prisma": "7.10.0"
 	},
 	"devDependencies": {
+		"@prisma/adapter-pg": "^7.10.1",
+		"@types/bcrypt": "^6.0.0",
+		"@types/compression": "^1.8.1",
+		"@types/cookie-parser": "^1.4.10",
+		"@types/cors": "^2.8.19",
+		"@types/express": "^5.0.6",
+		"@types/jsonwebtoken": "^9.0.10",
+		"@types/node": "^26.6.6",
 		"@types/nodemailer": "^7.0.11",
-		"nodemon": "^3.1.14"
+		"@types/pg": "^8.23.1",
+		"nodemon": "^3.1.14",
+		"ts-node": "^10.9.2",
+		"typescript": "^5.9.3"
 	}
 }
