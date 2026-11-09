@@ -4,11 +4,10 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1",
-		"start": "ts-node --esm src/index.ts",
-		"dev": "nodemon --exec \"ts-node --esm\" src/index.ts",
-		"prisma:generate": "prisma generate",
-		"prisma:migrate": "prisma migrate dev"
+	"start": "tsx src/index.ts",
+	"dev": "nodemon --exec \"tsx\" src/index.ts",
+	"prisma:generate": "prisma generate",
+	"prisma:migrate": "prisma migrate dev"
 	},
 	"repository": {
 		"type": "git",
@@ -38,7 +37,8 @@
 		"mongoose": "^9.2.4",
 		"nodemailer": "^8.0.1",
 		"pg": "^8.23.1",
-		"prisma": "7.10.0"
+		"prisma": "7.10.0",
+		"typescript": "^7.0.2"
 	},
 	"devDependencies": {
 		"@prisma/adapter-pg": "^7.10.1",
@@ -52,7 +52,6 @@
 		"@types/nodemailer": "^7.0.11",
 		"@types/pg": "^8.23.1",
 		"nodemon": "^3.1.14",
-		"ts-node": "^10.9.2",
-		"typescript": "^5.9.3"
+		"tsx": "^4.23.15"
 	}
 }
