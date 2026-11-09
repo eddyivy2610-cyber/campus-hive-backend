@@ -6,3 +6,136 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum MessageVisibility {
+  EVERYONE
+  CAMPUS
+  NO_ONE
+}
+
+enum ProfileVisibility {
+  EVERYONE
+  CAMPUS
+  NO_ONE
+}
+
+enum ContactChannel {
+  IN_APP
+  WHATSAPP
+}
+
+model User {
+  id        String      @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  fullName  String
+  displayName String?
+
+  profileImage String?
+
+  campusId  String?
+  campus    campus? @relation("UserCampus", fields: [campusId], references: [id])
+  major     String?
+  majorYear String?
+  bio       String?
+
+  whoCanMessageMe MessageVisibility @default(EVERYONE)
+  profileVisibility ProfileVisibility @default(EVERYONE)
+  contactChannel ContactChannel @default(IN_APP)
+  showOnlineStatus Boolean @default(true)
+  showMilestoneAchievements Boolean @default(true)
+
+  passwordHash  String
+
+  campusAdded campus[]  @relation("CampusAdded")
+
+  role      Role     @default(USER)
+  verificationTokens VerificationToken[]
+  isEmailVerified Boolean @default(false)
+
+  sessions Session[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  passwordUpdatedAt DateTime @default(now())
+}
+
+enum TokenType {
+  EMAIL_VERIFICATION_SIGNUP
+  EMAIL_VERIFICATION_PASSWORD_RESET
+}
+
+model VerificationToken {
+  id        String      @id @default(cuid())
+  token     String   @unique
+  otpHash       String  
+  userId    String
+  type      TokenType
+  user      User     @relation(fields: [userId], references: [id])
+  verified   Boolean  @default(false)
+  verifiedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  otpHashUpdatedAt DateTime @default(now())
+}
+
+model campus {
+  id        String      @id @default(cuid())
+  name      String   @unique
+  university String
+  location  String
+  createdAt DateTime @default(now())
+
+  users     User[] @relation("UserCampus")
+
+  addedBy   User     @relation("CampusAdded", fields: [addedById], references: [id])
+  addedById String
+
+  updatedAt DateTime @updatedAt
+}
+
+enum SessionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+  WEB
+}
+
+model Session {
+  id String @id @default(cuid())
+  refreshTokenHash String? @unique
+
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status SessionStatus @default(ACTIVE)
+
+  expiresAt DateTime
+  lastUsedAt DateTime @default(now())
+
+  ipAddress String?
+  lastKnownLat Float?
+  lastKnownLong Float?
+  latLongUpdatedAt DateTime?
+  userAgent String?
+  pushToken    String?
+  platform         DevicePlatform?
+  appVersion String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+
+}

@@ -4,10 +4,10 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-	"start": "tsx src/index.ts",
-	"dev": "nodemon --exec \"tsx\" src/index.ts",
-	"prisma:generate": "prisma generate",
-	"prisma:migrate": "prisma migrate dev"
+		"start": "tsx src/index.ts",
+		"dev": "nodemon --exec \"tsx\" src/index.ts",
+		"prisma:generate": "prisma generate",
+		"prisma:migrate": "prisma migrate dev"
 	},
 	"repository": {
 		"type": "git",
@@ -34,6 +34,7 @@
 		"helmet": "^8.1.0",
 		"helmet-csp": "^4.0.0",
 		"joi": "^18.0.2",
+		"jsonwebtoken": "^9.0.3",
 		"mongoose": "^9.2.4",
 		"nodemailer": "^8.0.1",
 		"pg": "^8.23.1",
