@@ -3,9 +3,9 @@ dotenv.config();
 
 import express, { type Request, type Response } from "express";
 import { createServer } from "http";
-import helmet from "helmet";
+import { default as helmet } from "helmet";
 import cors from "cors";
-import rateLimit from "express-rate-limit";
+import { rateLimit } from "express-rate-limit";
 import compression from "compression";
 import cookieParser from "cookie-parser";
 import indexRouter from "./routes/index.route.ts";
