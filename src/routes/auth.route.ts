@@ -43,7 +43,11 @@ router.post("/verify-otp", async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (user) {
       const vt = await prisma.verificationToken.findFirst({
-        where: { userId: user.id, type: "SIGNUP", verified: false },
+        where: {
+          userId: user.id,
+          type: { in: ["EMAIL_VERIFICATION_SIGNUP", "SIGNUP"] },
+          verified: false,
+        },
         orderBy: { createdAt: "desc" },
         select: { token: true },
       });
@@ -52,5 +56,36 @@ router.post("/verify-otp", async (req: Request, res: Response) => {
   }
   return signupVerification(req, res);
 });
+
+async function handleResendByEmail(req: Request, res: Response) {
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  if (!req.params.token && email) {
+    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (user) {
+      const vt = await prisma.verificationToken.findFirst({
+        where: {
+          userId: user.id,
+          type: { in: ["EMAIL_VERIFICATION_SIGNUP", "SIGNUP"] },
+          verified: false,
+        },
+        orderBy: { createdAt: "desc" },
+        select: { token: true },
+      });
+      if (vt) req.params.token = vt.token;
+    }
+  }
+  if (!req.params.token) {
+    res.status(200).json({
+      success: true,
+      message: "If an unverified account exists for this email, a new verification code has been sent.",
+    });
+    return;
+  }
+  return requestNewVerificationTokenCode(req, res);
+}
+
+router.post("/send-otp-to-email", otpIpRateLimiter, handleResendByEmail);
+router.post("/resend-verification", otpIpRateLimiter, handleResendByEmail);
+router.post("/send-otp", otpIpRateLimiter, handleResendByEmail);
 
 export default router;
