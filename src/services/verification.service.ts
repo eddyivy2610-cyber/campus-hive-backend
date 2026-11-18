@@ -1,14 +1,5 @@
-import { generateToken } from "../lib/generate.ts";
-import prisma from "../prisma.ts";
+import crypto from "crypto";
 
-export async function generateVerificationToken() {
-  let hasFoundUniqueToken:boolean = false;
-  let token = generateToken("vt");
-  while (!hasFoundUniqueToken) {
-    const existingToken = await prisma.verificationToken.findUnique({
-      where: { token },
-    });
-    hasFoundUniqueToken = existingToken ? false : true;
-  }
-  return token;
+export async function generateVerificationToken(): Promise<string> {
+  return `vt_${crypto.randomBytes(32).toString("base64url")}`;
 }

@@ -54,7 +54,15 @@ export const ModelName = {
   User: 'User',
   VerificationToken: 'VerificationToken',
   campus: 'campus',
-  Session: 'Session'
+  Session: 'Session',
+  RefreshToken: 'RefreshToken',
+  Store: 'Store',
+  Listing: 'Listing',
+  Follow: 'Follow',
+  Order: 'Order',
+  Review: 'Review',
+  Conversation: 'Conversation',
+  Message: 'Message'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -91,6 +99,9 @@ export const UserScalarFieldEnum = {
   showMilestoneAchievements: 'showMilestoneAchievements',
   passwordHash: 'passwordHash',
   role: 'role',
+  accountStatus: 'accountStatus',
+  tokenVersion: 'tokenVersion',
+  storesCount: 'storesCount',
   isEmailVerified: 'isEmailVerified',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
@@ -108,6 +119,8 @@ export const VerificationTokenScalarFieldEnum = {
   type: 'type',
   verified: 'verified',
   verifiedAt: 'verifiedAt',
+  consumedAt: 'consumedAt',
+  failedAttempts: 'failedAttempts',
   expiresAt: 'expiresAt',
   createdAt: 'createdAt',
   otpHashUpdatedAt: 'otpHashUpdatedAt'
@@ -131,6 +144,7 @@ export type CampusScalarFieldEnum = (typeof CampusScalarFieldEnum)[keyof typeof 
 
 export const SessionScalarFieldEnum = {
   id: 'id',
+  familyId: 'familyId',
   refreshTokenHash: 'refreshTokenHash',
   userId: 'userId',
   status: 'status',
@@ -149,6 +163,118 @@ export const SessionScalarFieldEnum = {
 } as const
 
 export type SessionScalarFieldEnum = (typeof SessionScalarFieldEnum)[keyof typeof SessionScalarFieldEnum]
+
+
+export const RefreshTokenScalarFieldEnum = {
+  id: 'id',
+  tokenHash: 'tokenHash',
+  sessionId: 'sessionId',
+  familyId: 'familyId',
+  usedAt: 'usedAt',
+  revokedAt: 'revokedAt',
+  expiresAt: 'expiresAt',
+  createdAt: 'createdAt'
+} as const
+
+export type RefreshTokenScalarFieldEnum = (typeof RefreshTokenScalarFieldEnum)[keyof typeof RefreshTokenScalarFieldEnum]
+
+
+export const StoreScalarFieldEnum = {
+  id: 'id',
+  ownerId: 'ownerId',
+  name: 'name',
+  slug: 'slug',
+  slugLower: 'slugLower',
+  description: 'description',
+  category: 'category',
+  campus: 'campus',
+  operatingLocation: 'operatingLocation',
+  status: 'status',
+  suspensionReason: 'suspensionReason',
+  followersCount: 'followersCount',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type StoreScalarFieldEnum = (typeof StoreScalarFieldEnum)[keyof typeof StoreScalarFieldEnum]
+
+
+export const ListingScalarFieldEnum = {
+  id: 'id',
+  storeId: 'storeId',
+  sellerId: 'sellerId',
+  title: 'title',
+  description: 'description',
+  price: 'price',
+  category: 'category',
+  campus: 'campus',
+  location: 'location',
+  status: 'status',
+  pausedBy: 'pausedBy',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ListingScalarFieldEnum = (typeof ListingScalarFieldEnum)[keyof typeof ListingScalarFieldEnum]
+
+
+export const FollowScalarFieldEnum = {
+  id: 'id',
+  followerId: 'followerId',
+  storeId: 'storeId',
+  createdAt: 'createdAt'
+} as const
+
+export type FollowScalarFieldEnum = (typeof FollowScalarFieldEnum)[keyof typeof FollowScalarFieldEnum]
+
+
+export const OrderScalarFieldEnum = {
+  id: 'id',
+  buyerId: 'buyerId',
+  sellerId: 'sellerId',
+  storeId: 'storeId',
+  status: 'status',
+  totalAmount: 'totalAmount',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type OrderScalarFieldEnum = (typeof OrderScalarFieldEnum)[keyof typeof OrderScalarFieldEnum]
+
+
+export const ReviewScalarFieldEnum = {
+  id: 'id',
+  orderId: 'orderId',
+  reviewerId: 'reviewerId',
+  sellerId: 'sellerId',
+  rating: 'rating',
+  comment: 'comment',
+  createdAt: 'createdAt'
+} as const
+
+export type ReviewScalarFieldEnum = (typeof ReviewScalarFieldEnum)[keyof typeof ReviewScalarFieldEnum]
+
+
+export const ConversationScalarFieldEnum = {
+  id: 'id',
+  participantA: 'participantA',
+  participantB: 'participantB',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ConversationScalarFieldEnum = (typeof ConversationScalarFieldEnum)[keyof typeof ConversationScalarFieldEnum]
+
+
+export const MessageScalarFieldEnum = {
+  id: 'id',
+  conversationId: 'conversationId',
+  senderId: 'senderId',
+  content: 'content',
+  createdAt: 'createdAt'
+} as const
+
+export type MessageScalarFieldEnum = (typeof MessageScalarFieldEnum)[keyof typeof MessageScalarFieldEnum]
 
 
 export const SortOrder = {

@@ -10,11 +10,22 @@
 */
 
 export const Role = {
-  USER: 'USER',
+  BUYER: 'BUYER',
+  SELLER: 'SELLER',
   ADMIN: 'ADMIN'
 } as const
 
 export type Role = (typeof Role)[keyof typeof Role]
+
+
+export const AccountStatus = {
+  PENDING: 'PENDING',
+  ACTIVE: 'ACTIVE',
+  SUSPENDED: 'SUSPENDED',
+  BANNED: 'BANNED'
+} as const
+
+export type AccountStatus = (typeof AccountStatus)[keyof typeof AccountStatus]
 
 
 export const MessageVisibility = {

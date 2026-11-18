@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import prisma from "../prisma.ts";
-import bcrypt from "bcrypt";
+import { getDummyPasswordHash, verifyPassword } from "../lib/password.ts";
+import { isDatabaseUnavailable } from "../lib/databaseErrors.ts";
 import { validateEmail } from "../lib/email.ts";
-import { startSession } from "../services/session.service.ts";
+import { setSessionCookies, startSession } from "../services/session.service.ts";
 
 
 export async function signin(req:Request, res:Response):Promise<void> {
@@ -25,14 +26,31 @@ export async function signin(req:Request, res:Response):Promise<void> {
             },
         });
         if (!user) {
+            // Equalize timing for unknown emails via dummy Argon2 verification
+            const dummyHash = await getDummyPasswordHash();
+            await verifyPassword(password, dummyHash).catch(() => false);
             res.status(401).json({ message: "Invalid email or password", error:"bad credentials" });
             return;
         }
         
-        const isPasswordMatch = await bcrypt.compare(password, user.passwordHash);
+        const isPasswordMatch = await verifyPassword(password, user.passwordHash);
 
         if (!isPasswordMatch) {
             res.status(401).json({ message: "Invalid email or password", error:"bad credentials" });
+            return;
+        }
+
+        if (!user.isEmailVerified) {
+            res.status(403).json({ message: "Please verify your email before signing in", error:"email_not_verified" });
+            return;
+        }
+
+        if (user.accountStatus === "SUSPENDED" || user.accountStatus === "BANNED") {
+            res.status(403).json({ message: "Account is suspended", error:"account_suspended" });
+            return;
+        }
+        if (user.accountStatus !== "ACTIVE") {
+            res.status(403).json({ message: "Please verify your email before signing in", error:"account_pending" });
             return;
         }
 
@@ -46,9 +64,13 @@ export async function signin(req:Request, res:Response):Promise<void> {
             return;
         }
 
+        if (session.session) {
+            setSessionCookies(req, res, session.session.accessToken, session.session.refreshToken);
+        }
+
         res.status(200).json({
             success:true, 
-            session, 
+            session: session.session ? { accessToken: session.session.accessToken } : null, 
             user:{
                 id:user.id, 
                 username:user.username, 
@@ -59,7 +81,14 @@ export async function signin(req:Request, res:Response):Promise<void> {
         });
 
     } catch (error) {
-        console.error("Error during signup verification:", error);
+        if (isDatabaseUnavailable(error)) {
+            res.status(503).json({
+                success: false,
+                error: "Database temporarily unavailable. Please try again shortly.",
+            });
+            return;
+        }
+        console.error("Error during signin:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 }

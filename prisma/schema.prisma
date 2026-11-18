@@ -8,8 +8,16 @@ datasource db {
 }
 
 enum Role {
-  USER
+  BUYER
+  SELLER
   ADMIN
+}
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  BANNED
 }
 
 enum MessageVisibility {
@@ -54,11 +62,23 @@ model User {
 
   campusAdded campus[]  @relation("CampusAdded")
 
-  role      Role     @default(USER)
+  role      Role          @default(BUYER)
+  accountStatus AccountStatus @default(PENDING)
+  tokenVersion Int   @default(0)
+  storesCount Int    @default(0)
   verificationTokens VerificationToken[]
   isEmailVerified Boolean @default(false)
 
   sessions Session[]
+  stores   Store[]
+  listings Listing[]
+  follows  Follow[]
+  buyerOrders  Order[] @relation("OrderBuyer")
+  sellerOrders Order[] @relation("OrderSeller")
+  reviews      Review[]
+  conversationsA Conversation[] @relation("ConversationParticipantA")
+  conversationsB Conversation[] @relation("ConversationParticipantB")
+  messages       Message[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -79,6 +99,8 @@ model VerificationToken {
   user      User     @relation(fields: [userId], references: [id])
   verified   Boolean  @default(false)
   verifiedAt DateTime?
+  consumedAt DateTime?
+  failedAttempts Int  @default(0)
   expiresAt DateTime
   createdAt DateTime @default(now())
   otpHashUpdatedAt DateTime @default(now())
@@ -113,12 +135,14 @@ enum DevicePlatform {
 
 model Session {
   id String @id @default(cuid())
+  familyId String @default(cuid())
   refreshTokenHash String? @unique
 
   userId String
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   status SessionStatus @default(ACTIVE)
+  refreshTokens RefreshToken[]
 
   expiresAt DateTime
   lastUsedAt DateTime @default(now())
@@ -137,5 +161,139 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([familyId])
 
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  sessionId String
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  familyId  String
+  usedAt    DateTime?
+  revokedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@index([sessionId])
+  @@index([familyId])
+}
+
+model Store {
+  id                String   @id @default(cuid())
+  ownerId           String
+  owner             User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name              String
+  slug              String   @unique
+  slugLower         String   @unique
+  description       String?
+  category          String?
+  campus            String?
+  operatingLocation String?
+  status            String   @default("active")
+  suspensionReason  String?
+  followersCount    Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  listings          Listing[]
+  follows           Follow[]
+
+  @@index([ownerId])
+  @@index([status])
+}
+
+model Listing {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sellerId    String
+  seller      User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  price       Float
+  category    String?
+  campus      String?
+  location    String?
+  status      String   @default("active")
+  pausedBy    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([storeId])
+  @@index([sellerId])
+}
+
+model Follow {
+  id         String   @id @default(cuid())
+  followerId String
+  follower   User     @relation(fields: [followerId], references: [id], onDelete: Cascade)
+  storeId    String
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([followerId, storeId])
+  @@index([storeId])
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  buyerId     String
+  buyer       User     @relation("OrderBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  sellerId    String
+  seller      User     @relation("OrderSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  storeId     String?
+  status      String   @default("processing")
+  totalAmount Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  reviews     Review[]
+
+  @@index([buyerId])
+  @@index([sellerId])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  orderId    String   @unique
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  reviewerId String
+  reviewer   User     @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+  sellerId   String
+  rating     Int
+  comment    String
+  createdAt  DateTime @default(now())
+
+  @@unique([reviewerId, orderId])
+  @@index([sellerId])
+}
+
+model Conversation {
+  id           String    @id @default(cuid())
+  participantA String
+  participantB String
+  userA        User      @relation("ConversationParticipantA", fields: [participantA], references: [id], onDelete: Cascade)
+  userB        User      @relation("ConversationParticipantB", fields: [participantB], references: [id], onDelete: Cascade)
+  messages     Message[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([participantA, participantB])
+  @@index([participantA])
+  @@index([participantB])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
 }

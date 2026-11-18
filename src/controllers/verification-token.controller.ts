@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../prisma.ts";
-import { randomString } from "../lib/generate.ts";
-import bcrypt from "bcrypt";
+import { generateNumericOtp } from "../lib/generate.ts";
+import { hashOtp, verifyOtp } from "../lib/otp.ts";
 import { sendOtpEmailService } from "../services/email.service.ts";
 import { generateVerificationToken } from "../services/verification.service.ts";
 import { isOlderThanMinutes } from "../lib/date.ts";
@@ -28,15 +28,17 @@ export async function requestNewVerificationTokenCode(req: Request, res: Respons
         }
         const now = new Date();
 
-        const isElligibleToRenew = isOlderThanMinutes(verificationToken.otpHashUpdatedAt, 1, now);
+        const rawDate = verificationToken.otpHashUpdatedAt || (verificationToken as any).otphashupdatedat;
+        const validDate = (rawDate instanceof Date && !isNaN(rawDate.getTime())) ? rawDate : new Date(0);
+        const isElligibleToRenew = isOlderThanMinutes(validDate, 1, now);
         if (!isElligibleToRenew) {
-            res.status(400).json({ message: "Please wait a minute before request new code", error:"bad timing" });
+            res.status(429).json({ message: "Please wait a minute before requesting a new code", error:"cooldown_active" });
             return;
         }
 
 
-        const otp = randomString(6).toUpperCase(); // Generate a 6-character OTP
-        const otpHash = await bcrypt.hash(otp, 10); // Hash the OTP before storing
+        const otp = generateNumericOtp(6); // Generate a 6-digit numeric OTP
+        const otpHash = hashOtp(otp); // HMAC-SHA256 with server pepper
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Set expiration time to 10 minutes from now
         // Store the OTP and token in the database
         await prisma.verificationToken.update({
@@ -46,7 +48,8 @@ export async function requestNewVerificationTokenCode(req: Request, res: Respons
             data: {
                 otpHash: otpHash,
                 expiresAt,
-                otpHashUpdatedAt:now
+                otpHashUpdatedAt:now,
+                failedAttempts: 0
             },
         });
 
@@ -57,6 +60,7 @@ export async function requestNewVerificationTokenCode(req: Request, res: Respons
     
     if (!sendEmail.success) {
         res.status(400).json({message:`Failed to process email address: ${sendEmail.message}`});
+        return;
     }
 
     res.status(200).json({ message: "Otp request successfully", verification:{ token, email:verificationToken.user.email, expiry:{duration:10, parameter:"minutes"} } });
@@ -80,13 +84,13 @@ export async function requestVerificationForForgetPassword(req: Request, res: Re
             },
         })
         if (!user) {
-            res.status(404).json({ message: "Account does not exists", error:"bad request" });
+            res.status(202).json({ message: "If an account with that email exists, a reset code has been sent." });
             return;
         }
 
 
-        const otp = randomString(6).toUpperCase(); // Generate a 6-character OTP
-        const otpHash = await bcrypt.hash(otp, 10); // Hash the OTP before storing
+        const otp = generateNumericOtp(6); // Generate a 6-digit numeric OTP
+        const otpHash = hashOtp(otp); // HMAC-SHA256 with server pepper
         const token = await generateVerificationToken(); // Generate a unique verification token
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Set expiration time to 10 minutes from now
         // Store the OTP and token in the database
@@ -107,6 +111,7 @@ export async function requestVerificationForForgetPassword(req: Request, res: Re
     
     if (!sendEmail.success) {
         res.status(400).json({message:`Failed to process email address: ${sendEmail.message}`});
+        return;
     }
 
     res.status(200).json({ message: "Otp request successfully", verification:{ token, email:user.email, expiry:{duration:10, parameter:"minutes"} } });
@@ -143,6 +148,18 @@ export async function verifyVerificationForForgetPassword(req: Request, res: Res
         res.status(400).json({ message: "Invalid verification token", error:"bad token" });
         return;
         }
+        if (verificationToken.type !== "EMAIL_VERIFICATION_PASSWORD_RESET") {
+            res.status(400).json({ message: "Invalid token type for password reset", error:"invalid_token_type" });
+            return;
+        }
+        if (verificationToken.consumedAt) {
+            res.status(400).json({ message: "Reset token has already been used", error:"token_already_used" });
+            return;
+        }
+        if (verificationToken.failedAttempts >= 5) {
+            res.status(429).json({ message: "Too many failed OTP attempts. Please request a new code.", error:"otp_locked" });
+            return;
+        }
         const expiresAt = verificationToken.expiresAt;
         if (expiresAt < new Date()) {
             res.status(400).json({ message: "Expired token, request a new otp code", error:"bad token" });
@@ -150,8 +167,20 @@ export async function verifyVerificationForForgetPassword(req: Request, res: Res
         }
 
         const storedOtpHash = verificationToken.otpHash;
-        const isMatch = await bcrypt.compare(otp, storedOtpHash);
+        const isMatch = verifyOtp(otp, storedOtpHash);
         if (!isMatch) {
+            const updatedRows = await prisma.$queryRaw<{ failedAttempts: number }[]>`
+                UPDATE "VerificationToken"
+                SET "failedAttempts" = "failedAttempts" + 1
+                WHERE "id" = ${verificationToken.id}
+                  AND "failedAttempts" < 5
+                  AND "consumedAt" IS NULL
+                RETURNING "failedAttempts"
+            `;
+            if (updatedRows.length === 0 || updatedRows[0].failedAttempts >= 5) {
+                res.status(429).json({ message: "Too many failed OTP attempts. Please request a new code.", error:"otp_locked" });
+                return;
+            }
             res.status(400).json({ message: "Invalid otp code ", error:"bad token" });
             return;
         }

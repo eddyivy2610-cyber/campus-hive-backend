@@ -1,0 +1,82 @@
+name: Contract Parity Gate (Backend B)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  contract-parity:
+    runs-on: ubuntu-latest
+    services:
+      mailpit:
+        image: axllent/mailpit:latest
+        ports:
+          - 8025:8025
+          - 1025:1025
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: campus_market_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Backend B (campus-market-backend)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: backend-b
+
+      - name: Checkout campus-hive-contract (Pinned v0.2.0-rc2 SHA)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: campushive/campus-hive-contract
+          ref: ed704c744877af9bfa7982b540fc20df6054315b
+          token: ${{ secrets.CONTRACT_REPO_READ_TOKEN }}
+          path: contract
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+
+      - name: Install & Start Backend B
+        working-directory: backend-b
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/campus_market_test?schema=public
+          PORT: '5000'
+          SMTP_HOST: 127.0.0.1
+          SMTP_PORT: '1025'
+          MAX_STORES_PER_USER: '1'
+          ACCESS_TOKEN_SECRET: ci-access-secret-minimum-32-characters
+          REFRESH_TOKEN_SECRET: ci-refresh-secret-minimum-32-characters
+        run: |
+          npm ci
+          npx prisma migrate deploy
+          nohup npm run start > backend-b.log 2>&1 &
+          for i in {1..30}; do
+            if curl -s -f "http://127.0.0.1:5000/health"; then break; fi
+            sleep 2
+          done
+
+      - name: Run Contract Suite (Pinned v0.2.0-rc2)
+        working-directory: contract
+        env:
+          BACKEND: pg-express
+          TARGET: local
+          CONTRACT_BASE_URL: http://127.0.0.1:5000
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/campus_market_test?schema=public
+          MAILPIT_URL: http://127.0.0.1:8025
+          STORE_CAP: '1'
+        run: |
+          npm ci
+          npm run lint:assertions
+          npx vitest run src/tests/auth.spec.ts src/tests/otp-reset.spec.ts --no-file-parallelism --reporter=verbose

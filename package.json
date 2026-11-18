@@ -4,8 +4,9 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-		"start": "tsx src/index.ts",
+		"start": "npx prisma migrate deploy && tsx src/index.ts",
 		"dev": "nodemon --exec \"tsx\" src/index.ts",
+		"postinstall": "prisma generate",
 		"prisma:generate": "prisma generate",
 		"prisma:migrate": "prisma migrate dev"
 	},
@@ -22,6 +23,7 @@
 	},
 	"homepage": "https://github.com/alimancs/campus-market-backend#readme",
 	"dependencies": {
+		"@prisma/adapter-pg": "^7.10.1",
 		"@prisma/client": "^7.10.1",
 		"argon2": "^0.44.0",
 		"bcrypt": "^6.0.0",
@@ -39,10 +41,10 @@
 		"nodemailer": "^8.0.1",
 		"pg": "^8.23.1",
 		"prisma": "7.10.0",
+		"tsx": "^4.23.15",
 		"typescript": "^7.0.2"
 	},
 	"devDependencies": {
-		"@prisma/adapter-pg": "^7.10.1",
 		"@types/bcrypt": "^6.0.0",
 		"@types/compression": "^1.8.1",
 		"@types/cookie-parser": "^1.4.10",
@@ -53,6 +55,8 @@
 		"@types/nodemailer": "^7.0.11",
 		"@types/pg": "^8.23.1",
 		"nodemon": "^3.1.14",
-		"tsx": "^4.23.15"
+		"pg-mem": "^3.0.14",
+		"pg-server": "^0.1.8",
+		"smtp-server": "^3.21.4"
 	}
 }

@@ -1,0 +1,226 @@
+import { Response } from "express";
+import prisma from "../prisma.ts";
+import { AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
+import { MAX_STORES_PER_USER } from "../lib/config.ts";
+import { toPublicStore } from "../lib/serializers.ts";
+
+const PUBLIC_STORE_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  description: true,
+  category: true,
+  campus: true,
+  operatingLocation: true,
+  status: true,
+  followersCount: true,
+  createdAt: true,
+} as const;
+
+export async function createStore(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized", error: "unauthorized" });
+      return;
+    }
+
+    const { name, slug, description, category, campus, operatingLocation } = req.body || {};
+    if (!name || typeof name !== "string" || !name.trim()) {
+      res.status(400).json({ message: "Store name is required", error: "bad_request" });
+      return;
+    }
+
+    const rawSlug =
+      typeof slug === "string" && slug.trim()
+        ? slug.trim()
+        : `${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
+    const slugLower = rawSlug.toLowerCase();
+
+    const store = await prisma.$transaction(async (tx) => {
+      const updated = await tx.user.updateMany({
+        where: {
+          id: userId,
+          storesCount: { lt: MAX_STORES_PER_USER },
+        },
+        data: {
+          storesCount: { increment: 1 },
+        },
+      });
+
+      if (updated.count === 0) {
+        throw Object.assign(new Error("Store cap reached"), { code: "STORE_CAP_EXCEEDED" });
+      }
+
+      return tx.store.create({
+        data: {
+          ownerId: userId,
+          name: name.trim(),
+          slug: rawSlug,
+          slugLower,
+          description: typeof description === "string" ? description : null,
+          category: typeof category === "string" ? category : null,
+          campus: typeof campus === "string" ? campus : null,
+          operatingLocation: typeof operatingLocation === "string" ? operatingLocation : null,
+        },
+        select: {
+          ...PUBLIC_STORE_SELECT,
+          ownerId: true,
+        },
+      });
+    });
+
+    res.status(201).json({ success: true, data: store });
+  } catch (err: any) {
+    if (err?.code === "STORE_CAP_EXCEEDED") {
+      res.status(409).json({
+        message: `Maximum of ${MAX_STORES_PER_USER} store(s) per user reached`,
+        error: "store_cap_exceeded",
+      });
+      return;
+    }
+    if (err?.code === "P2002") {
+      res.status(409).json({ message: "Store slug already exists", error: "slug_conflict" });
+      return;
+    }
+    console.error("Error creating store:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function listMyStores(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized", error: "unauthorized" });
+      return;
+    }
+
+    const stores = await prisma.store.findMany({
+      where: { ownerId: userId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        ...PUBLIC_STORE_SELECT,
+        ownerId: true,
+      },
+    });
+
+    res.status(200).json({ success: true, data: { stores }, stores });
+  } catch (err) {
+    console.error("Error listing my stores:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function getPublicStore(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const slug = String(req.params.slug || "").trim().toLowerCase();
+    if (!slug) {
+      res.status(404).json({ message: "Store not found", error: "not_found" });
+      return;
+    }
+
+    const store = await prisma.store.findUnique({
+      where: { slugLower: slug },
+    });
+
+    if (!store || store.status !== "active") {
+      res.status(404).json({ message: "Store not found", error: "not_found" });
+      return;
+    }
+
+    const reviewAgg = await prisma.review.aggregate({
+      where: { sellerId: store.ownerId },
+      _count: { _all: true },
+      _avg: { rating: true },
+    });
+    const reviewsCount = Number(reviewAgg._count?._all ?? 0);
+    const rating = reviewsCount > 0 ? Number(reviewAgg._avg?.rating ?? 5) : 5;
+
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.status(200).json({ success: true, data: toPublicStore(store, { rating, reviewsCount }) });
+  } catch (err) {
+    console.error("Error fetching public store:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function updateStore(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.auth?.userId;
+    const storeId = String(req.params.id || "");
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized", error: "unauthorized" });
+      return;
+    }
+
+    const existing = await prisma.store.findUnique({ where: { id: storeId } });
+    if (!existing) {
+      res.status(404).json({ message: "Store not found", error: "not_found" });
+      return;
+    }
+    if (existing.ownerId !== userId) {
+      res.status(403).json({ message: "Forbidden: not store owner", error: "forbidden" });
+      return;
+    }
+
+    const { name, description, category, campus, operatingLocation } = req.body || {};
+    const updated = await prisma.store.update({
+      where: { id: storeId },
+      data: {
+        ...(typeof name === "string" && name.trim() ? { name: name.trim() } : {}),
+        ...(typeof description === "string" ? { description } : {}),
+        ...(typeof category === "string" ? { category } : {}),
+        ...(typeof campus === "string" ? { campus } : {}),
+        ...(typeof operatingLocation === "string" ? { operatingLocation } : {}),
+      },
+      select: {
+        ...PUBLIC_STORE_SELECT,
+        ownerId: true,
+      },
+    });
+
+    res.status(200).json({ success: true, data: updated });
+  } catch (err) {
+    console.error("Error updating store:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function deleteStore(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.auth?.userId;
+    const storeId = String(req.params.id || "");
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized", error: "unauthorized" });
+      return;
+    }
+
+    const existing = await prisma.store.findUnique({ where: { id: storeId } });
+    if (!existing) {
+      res.status(404).json({ message: "Store not found", error: "not_found" });
+      return;
+    }
+    if (existing.ownerId !== userId) {
+      res.status(403).json({ message: "Forbidden: not store owner", error: "forbidden" });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const deleted = await tx.store.deleteMany({
+        where: { id: storeId, ownerId: userId },
+      });
+      if (deleted.count > 0) {
+        await tx.user.updateMany({
+          where: { id: userId, storesCount: { gt: 0 } },
+          data: { storesCount: { decrement: 1 } },
+        });
+      }
+    });
+
+    res.status(200).json({ success: true, message: "Store deleted" });
+  } catch (err) {
+    console.error("Error deleting store:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}

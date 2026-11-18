@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: campushive-backend-b
+    runtime: node
+    plan: free
+    branch: rewrite
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: MAX_STORES_PER_USER
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: ACCESS_TOKEN_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: OTP_PEPPER
+        generateValue: true
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: JWT_ISSUER
+        value: campushive
+      - key: JWT_AUDIENCE
+        value: campushive-web
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: EMAIL_APP_PASSWORD
+        sync: false

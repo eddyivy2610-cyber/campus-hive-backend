@@ -1,0 +1,19 @@
+import { Router } from "express";
+import { authenticate } from "../middlewares/auth.middleware.ts";
+import {
+  createStore,
+  deleteStore,
+  getPublicStore,
+  listMyStores,
+  updateStore,
+} from "../controllers/store.controller.ts";
+
+const router = Router();
+
+router.get("/me", authenticate, listMyStores);
+router.post("/", authenticate, createStore);
+router.get("/:slug", getPublicStore);
+router.patch("/:id", authenticate, updateStore);
+router.delete("/:id", authenticate, deleteStore);
+
+export default router;

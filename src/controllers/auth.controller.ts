@@ -1,8 +1,10 @@
 import { Request, Response } from "express";
 import prisma from "../prisma.ts";
-import bcrypt from "bcrypt";
-import { generateSessionTokens } from "../services/token.service.ts";
+import { hashPassword } from "../lib/password.ts";
+import { generateAccessToken, generateOpaqueRefreshToken, hashRefreshToken } from "../services/token.service.ts";
+import { setSessionCookies } from "../services/session.service.ts";
 import jwt from "jsonwebtoken";
+import { AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 
 export async function processVerificationForForgetPassword(req: Request, res: Response): Promise<void> {
     try {
@@ -10,12 +12,12 @@ export async function processVerificationForForgetPassword(req: Request, res: Re
         const {token} = req.params;
 
         if (!token) {
-        res.status(400).json({ message: "Invalid verification token", error:"bad token" });
-        return;
+            res.status(400).json({ message: "Invalid verification token", error:"bad token" });
+            return;
         }
         if (!newPassword) {
-        res.status(400).json({ message: "Invalid password", error:"bad parameter" });
-        return;
+            res.status(400).json({ message: "Invalid password", error:"bad parameter" });
+            return;
         }
 
         // validate token
@@ -28,83 +30,280 @@ export async function processVerificationForForgetPassword(req: Request, res: Re
             }
         });
         if (!verificationToken) {
-        res.status(400).json({ message: "Invalid verification token", error:"bad token" });
-        return;
+            res.status(400).json({ message: "Invalid verification token", error:"bad token" });
+            return;
+        }
+        if (verificationToken.type !== "EMAIL_VERIFICATION_PASSWORD_RESET") {
+            res.status(400).json({ message: "Invalid token type for password reset", error:"invalid_token_type" });
+            return;
+        }
+        if (verificationToken.consumedAt) {
+            res.status(400).json({ message: "Reset token has already been used", error:"token_already_used" });
+            return;
+        }
+        if (verificationToken.expiresAt < new Date()) {
+            res.status(400).json({ message: "Expired reset token", error:"bad token" });
+            return;
         }
         if (!verificationToken.verified) {
             res.status(403).json({ message: "Unverified request token", error:"unauthorised" });
             return;
         }
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
         const now = new Date();
-        await prisma.user.update({
-            where:{id:verificationToken.userId},
-            data:{
-                passwordHash:hashedPassword,
-                passwordUpdatedAt:now
-            }
-        })
+        // Atomically consume reset token in one conditional UPDATE ... RETURNING
+        const consumedRows = await prisma.$queryRaw<{ id: string }[]>`
+            UPDATE "VerificationToken"
+            SET "consumedAt" = ${now}
+            WHERE "id" = ${verificationToken.id}
+              AND "type" = 'EMAIL_VERIFICATION_PASSWORD_RESET'
+              AND "verified" = true
+              AND "consumedAt" IS NULL
+              AND "expiresAt" > ${now}
+            RETURNING "id"
+        `;
+        if (consumedRows.length === 0) {
+            res.status(400).json({ message: "Reset token has already been used or expired", error:"token_already_used" });
+            return;
+        }
+
+        const hashedPassword = await hashPassword(newPassword);
+
+        await prisma.$transaction([
+            prisma.user.update({
+                where:{id:verificationToken.userId},
+                data:{
+                    passwordHash:hashedPassword,
+                    passwordUpdatedAt:now,
+                    tokenVersion: { increment: 1 }
+                }
+            }),
+            prisma.session.updateMany({
+                where:{ userId: verificationToken.userId, status: "ACTIVE" },
+                data:{ status: "REVOKED" }
+            }),
+            prisma.refreshToken.updateMany({
+                where:{ session: { userId: verificationToken.userId }, revokedAt: null },
+                data:{ revokedAt: now }
+            })
+        ]);
 
         res.status(200).json({ message: "Password updated successfully", success:true });
-  } catch (error) {
-    console.error("Error during signup:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
+    } catch (error) {
+        console.error("Error during password reset:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+async function revokeSessionFamily(familyId: string, now: Date): Promise<void> {
+    await prisma.$transaction([
+        prisma.session.updateMany({
+            where: { familyId, status: "ACTIVE" },
+            data: { status: "REVOKED" }
+        }),
+        prisma.refreshToken.updateMany({
+            where: { familyId, revokedAt: null },
+            data: { revokedAt: now }
+        })
+    ]);
+}
+
+function getCookieClearOptions(req: Request, path = "/") {
+    const isSecure = Boolean(
+        req.secure ||
+        process.env.NODE_ENV === "production"
+    );
+    return {
+        httpOnly: true,
+        secure: isSecure,
+        sameSite: "lax" as const,
+        path
+    };
 }
 
 export async function refreshToken(req:Request, res:Response) {
     try {
-        console.log("Refreshing token 🔁");
-        const {token:refresh} = req.params;
+        const rawRefresh = req.cookies?.refreshToken;
 
-        if (!refresh) {
+        if (!rawRefresh || typeof rawRefresh !== "string") {
             return res.status(401).json({ success:false, message:"Refresh token required"});
         }
 
-        const refresh_secret = process.env.REFRESH_TOKEN_SECRET!;
-        console.log("Decoding...")
-        const decoded = jwt.verify(refresh as string, refresh_secret);
-        // Guard: if decoded is a string (shouldn't happen with object‑signed tokens), reject
-        if (typeof decoded === 'string') {
-            return res.status(401).json({ message: "Invalid token format", error: "Unauthorized" });
-        }
-        const { sessionId, exp } = decoded;
-        console.log("Success Decoding ✅")
-    
-        const session = await prisma.session.findFirst({
-            where:{
-                id:sessionId,
-                expiresAt:{ gt:new Date()}
-            },
+        const tokenHash = hashRefreshToken(rawRefresh);
+        const now = new Date();
+        const storedToken = await prisma.refreshToken.findUnique({
+            where: { tokenHash },
             include: {
-                user:true
+                session: {
+                    include: {
+                        user: true
+                    }
+                }
             }
         });
-        if (!session || session.expiresAt < new Date()) {
-            console.log("Invalid or expired token")
+
+        if (!storedToken) {
+            return res.status(401).json({ message: "Invalid or expired refresh token", error: "Unauthorized" });
+        }
+
+        const { session } = storedToken;
+        if (storedToken.usedAt !== null || storedToken.revokedAt !== null || session.status !== "ACTIVE") {
+            await revokeSessionFamily(storedToken.familyId, now);
+            return res.status(401).json({ message: "Refresh token reuse detected; session family revoked", error: "token_reused" });
+        }
+
+        if (storedToken.expiresAt <= now || session.expiresAt <= now) {
+            // Cleanup-on-lookup guard: purge expired refresh token(s) immediately even without background timers
+            await prisma.refreshToken.deleteMany({
+                where: {
+                    OR: [
+                        { id: storedToken.id },
+                        { sessionId: session.id, expiresAt: { lte: now } },
+                    ],
+                },
+            });
             return res.status(401).json({ message: "Missing or expired session", error: "Unauthorized" });
-        };
-        console.log("Session valid ✅");
+        }
 
         const user = session.user;
-        console.log("Generating & hashing new token");
-        const {accessToken, refreshToken} = generateSessionTokens(user.id, session.id);
-        const newRefreshTokenHash = await bcrypt.hash(refreshToken, 10);
-        await prisma.session.update(
-            {
-                where:{id:session.id},
-                data:{refreshTokenHash:newRefreshTokenHash}
-            }
-        );
+        if (user.accountStatus === "SUSPENDED" || user.accountStatus === "BANNED") {
+            return res.status(403).json({ message: "Account is suspended", error: "account_suspended" });
+        }
+        if (user.accountStatus !== "ACTIVE") {
+            return res.status(403).json({ message: "Account is not active", error: "account_not_active" });
+        }
 
-        console.log("Token refresh successfull ✅")
+        // Atomically consume this refresh token in one conditional UPDATE ... RETURNING;
+        // concurrent reuse triggers family revocation
+        const consumedRows = await prisma.$queryRaw<{ id: string }[]>`
+            UPDATE "RefreshToken"
+            SET "usedAt" = ${now}
+            WHERE "id" = ${storedToken.id}
+              AND "usedAt" IS NULL
+              AND "revokedAt" IS NULL
+              AND "expiresAt" > ${now}
+            RETURNING "id"
+        `;
+        if (consumedRows.length === 0) {
+            await revokeSessionFamily(storedToken.familyId, now);
+            return res.status(401).json({ message: "Refresh token reuse detected; session family revoked", error: "token_reused" });
+        }
 
-        res.status(200).json({success:true, session:{accessToken,refreshToken}});
+        const nextOpaque = generateOpaqueRefreshToken();
+        const nextExpiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        await prisma.$transaction([
+            prisma.refreshToken.create({
+                data: {
+                    tokenHash: nextOpaque.tokenHash,
+                    sessionId: session.id,
+                    familyId: storedToken.familyId,
+                    expiresAt: nextExpiresAt
+                }
+            }),
+            prisma.session.update({
+                where: { id: session.id },
+                data: { refreshTokenHash: nextOpaque.tokenHash, lastUsedAt: now }
+            })
+        ]);
+
+        const accessToken = generateAccessToken(user.id, session.id, user.tokenVersion);
+        setSessionCookies(req, res, accessToken, nextOpaque.token);
+
+        res.status(200).json({success:true, session:{accessToken}});
     } catch (error:any) {
-        console.error("Refresh failed");
-        console.error("Process error:", error?.message || error || "Unknown error");
+        console.error("Refresh failed:", error?.message || error || "Unknown error");
+        res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+export async function getMe(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+        const userId = req.auth?.userId;
+        if (!userId) {
+            res.status(401).json({ message: "Unauthorized", error: "unauthorized" });
+            return;
+        }
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                email: true,
+                username: true,
+                fullName: true,
+                displayName: true,
+                profileImage: true,
+                role: true,
+                isEmailVerified: true,
+                accountStatus: true,
+                createdAt: true,
+            }
+        });
+        if (!user) {
+            res.status(401).json({ message: "User not found", error: "unauthorized" });
+            return;
+        }
+        res.setHeader("Cache-Control", "private, no-store");
+        res.status(200).json({ success: true, user });
+    } catch (error) {
+        console.error("Error in getMe:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+export async function logout(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+        const sessionId = req.auth?.sessionId;
+        if (!sessionId) {
+            res.status(401).json({ message: "Unauthorized", error: "unauthorized" });
+            return;
+        }
+        const now = new Date();
+        await prisma.$transaction([
+            prisma.session.updateMany({
+                where: { id: sessionId, status: "ACTIVE" },
+                data: { status: "REVOKED" }
+            }),
+            prisma.refreshToken.updateMany({
+                where: { sessionId, revokedAt: null },
+                data: { revokedAt: now }
+            })
+        ]);
+        res.clearCookie("accessToken", getCookieClearOptions(req, "/"));
+        res.clearCookie("refreshToken", getCookieClearOptions(req, "/api/v1/auth"));
+        res.status(200).json({ success: true, message: "Logged out successfully" });
+    } catch (error) {
+        console.error("Error in logout:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+export async function logoutAll(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+        const userId = req.auth?.userId;
+        if (!userId) {
+            res.status(401).json({ message: "Unauthorized", error: "unauthorized" });
+            return;
+        }
+        const now = new Date();
+        await prisma.$transaction([
+            prisma.session.updateMany({
+                where: { userId, status: "ACTIVE" },
+                data: { status: "REVOKED" }
+            }),
+            prisma.refreshToken.updateMany({
+                where: { session: { userId }, revokedAt: null },
+                data: { revokedAt: now }
+            }),
+            prisma.user.update({
+                where: { id: userId },
+                data: { tokenVersion: { increment: 1 } }
+            })
+        ]);
+        res.clearCookie("accessToken", getCookieClearOptions(req, "/"));
+        res.clearCookie("refreshToken", getCookieClearOptions(req, "/api/v1/auth"));
+        res.status(200).json({ success: true, message: "All sessions revoked successfully" });
+    } catch (error) {
+        console.error("Error in logoutAll:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 }

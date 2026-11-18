@@ -1,57 +1,61 @@
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import prisma from "../prisma.ts";
+import { JWT_AUDIENCE, JWT_ISSUER } from "../lib/config.ts";
 
 
 // Generate strong secrets (store in env variables)
 const ACCESS_SECRET = process.env.ACCESS_TOKEN_SECRET;
 const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET;
 
-export function generateSessionTokens(userId:string, sessionId:string) {
-    const accessToken = jwt.sign(
-        { 
+export function hashRefreshToken(rawToken: string): string {
+    return crypto.createHash("sha256").update(rawToken).digest("hex");
+}
+
+export function generateOpaqueRefreshToken(): { token: string; tokenHash: string } {
+    // 64 cryptographically random bytes (>= 32 bytes required, > 72 chars in base64url), SHA-256 hashed at rest
+    const token = crypto.randomBytes(64).toString("base64url");
+    return { token, tokenHash: hashRefreshToken(token) };
+}
+
+export function generateAccessToken(userId: string, sessionId: string, tokenVersion = 0): string {
+    const accessSecret = process.env.ACCESS_TOKEN_SECRET || ACCESS_SECRET!;
+    return jwt.sign(
+        {
             sub: userId,
             sessionId,
-            tokenType: 'access'
+            tokenVersion,
+            tokenType: 'access',
         },
-        ACCESS_SECRET!,
-        { 
-            expiresIn: '15m',      // short-lived
-            issuer: 'gatherly',
-            audience: 'api.gatherly.com',
-            jwtid: crypto.randomUUID() // unique token ID (jti)
+        accessSecret,
+        {
+            expiresIn: '15m',
+            issuer: JWT_ISSUER,
+            audience: JWT_AUDIENCE,
+            jwtid: crypto.randomUUID(),
         }
     );
+}
 
-    const refreshToken = jwt.sign(
-        { 
-            sub: userId,
-            sessionId,            // bound to same session
-            tokenType: 'refresh',  // to distinguish
-        },
-        REFRESH_SECRET!,
-        { 
-            expiresIn: '7d',      // longer lifetime
-            issuer: 'gatherly',
-            audience: 'api.gatherly.com',
-            jwtid: crypto.randomUUID()
-        }
-    );
-
+export function generateSessionTokens(userId:string, sessionId:string, tokenVersion = 0) {
+    const accessToken = generateAccessToken(userId, sessionId, tokenVersion);
+    const { token: refreshToken } = generateOpaqueRefreshToken();
     return { accessToken, refreshToken };
 };
 
-export async function verifyAccessToken(token:string):Promise<{userId:string, sessionId:string} | null> {
-    const access_secret = process.env.ACCESS_TOKEN_SECRET!;
-        const decoded = jwt.verify(token, access_secret);
+export async function verifyAccessToken(token:string):Promise<{userId:string, sessionId:string, tokenVersion:number} | null> {
+    try {
+        const access_secret = process.env.ACCESS_TOKEN_SECRET!;
+        const decoded = jwt.verify(token, access_secret, {
+            issuer: JWT_ISSUER,
+            audience: JWT_AUDIENCE,
+            algorithms: ['HS256'],
+        });
 
-
-        // Guard: if decoded is a string (shouldn't happen with object‑signed tokens), reject
         if (typeof decoded === 'string') {
             return null;
         }
 
-        const { sub: userId, sessionId, exp } = decoded;
+        const { sub: userId, sessionId, tokenVersion, tokenType } = decoded as any;
 
         if (!userId || typeof userId !== 'string') {
             return null;
@@ -59,13 +63,18 @@ export async function verifyAccessToken(token:string):Promise<{userId:string, se
 
         if (!sessionId || typeof sessionId !== 'string') {
             return null;
-        };
+        }
 
-        const sessionRecord = await prisma.session.findFirst({where:{id:sessionId}});
-
-        if (!sessionRecord || sessionRecord.expiresAt < new Date()) {
+        if (tokenType !== 'access') {
             return null;
-        };
+        }
 
-        return {userId, sessionId};
+        return {
+            userId,
+            sessionId,
+            tokenVersion: typeof tokenVersion === 'number' ? tokenVersion : 0,
+        };
+    } catch {
+        return null;
+    }
 }

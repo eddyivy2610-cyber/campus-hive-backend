@@ -10,15 +10,24 @@ interface SendEmailServiceParams {
 const fromAddress = "campushiveng@gmail.com";
 let transporter: nodemailer.Transporter | undefined;
 
+export function resetEmailTransporterForTest(): void {
+  transporter = undefined;
+}
+
 function getEmailTransporter(): nodemailer.Transporter {
   transporter ??= nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    auth: {
-      user: fromAddress,
-      pass: process.env.EMAIL_APP_PASSWORD,
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === "true",
+    tls: {
+      rejectUnauthorized: false,
     },
+    auth: process.env.EMAIL_APP_PASSWORD
+      ? {
+          user: fromAddress,
+          pass: process.env.EMAIL_APP_PASSWORD,
+        }
+      : undefined,
   });
 
   return transporter;

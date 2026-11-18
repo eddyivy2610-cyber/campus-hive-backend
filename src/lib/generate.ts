@@ -1,3 +1,13 @@
+import crypto from "crypto";
+
+export function generateNumericOtp(length = 6): string {
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += String(crypto.randomInt(0, 10));
+  }
+  return result;
+}
+
 export function randomString(length: number): string {
   const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let result = "";

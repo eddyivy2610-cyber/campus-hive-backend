@@ -1,11 +1,13 @@
+import crypto from "crypto";
 import { Request, Response } from "express";
 import prisma from "../prisma.ts";
-import bcrypt from "bcrypt";
-import { randomString } from "../lib/generate.ts";
+import { hashOtp, verifyOtp } from "../lib/otp.ts";
+import { hashPassword } from "../lib/password.ts";
+import { generateNumericOtp } from "../lib/generate.ts";
 import { generateVerificationToken } from "../services/verification.service.ts";
 import { sendOtpEmailService } from "../services/email.service.ts";
 import { validateEmail } from "../lib/email.ts";
-import { startSession } from "../services/session.service.ts";
+import { setSessionCookies, startSession } from "../services/session.service.ts";
 
 export async function signup(req: Request, res: Response): Promise<void> {
   try {
@@ -36,23 +38,25 @@ export async function signup(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-    // generate unique username based on fullName and a random number
-    const randomNum = Math.floor(Math.random() * 10000);
-    const username = `${fullName.split(" ")[0].replace(/\s+/g, "").toLowerCase()}${randomNum}_hive`;
-    // Create new user
+    // Hash the password using Argon2id (no 72-byte truncation)
+    const hashedPassword = await hashPassword(password);
+    // generate unique username based on fullName and a random hex suffix
+    const randomSuffix = crypto.randomBytes(4).toString("hex");
+    const username = `${fullName.split(" ")[0].replace(/\s+/g, "").toLowerCase()}${randomSuffix}_hive`;
+    // Create new user (explicitly PENDING and BUYER; schema also defaults to PENDING/BUYER)
     const newUser = await prisma.user.create({
       data: {
         email,
         passwordHash: hashedPassword,
         fullName,
         username,
+        accountStatus: "PENDING",
+        role: "BUYER",
       },
     });
 
-    const otp = randomString(6); // Generate a 6-character OTP
-    const otpHash = await bcrypt.hash(otp, 10); // Hash the OTP before storing
+    const otp = generateNumericOtp(6); // Generate a 6-digit numeric OTP
+    const otpHash = hashOtp(otp); // HMAC-SHA256 with server pepper
     const token = await generateVerificationToken(); // Generate a unique verification token
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Set expiration time to 10 minutes from now
     // Store the OTP and token in the database
@@ -72,11 +76,16 @@ export async function signup(req: Request, res: Response): Promise<void> {
     }
     
     if (!sendEmail.success) {
-        Promise.all([
-            prisma.user.delete({where:{id:newUser.id}}),
-            prisma.verificationToken.delete({where:{id:newVerificationToken.id}})
-        ]);
-        res.status(400).json({message:`Failed to process email address: ${sendEmail.message}`});
+      // Keep the PENDING account and verification token intact; reset cooldown so resend works immediately
+      await prisma.verificationToken.update({
+        where: { id: newVerificationToken.id },
+        data: { otpHashUpdatedAt: new Date(0) },
+      });
+      res.status(201).json({
+        message: "User created successfully",
+        verification: { token, email, expiry: { duration: 10, parameter: "minutes" } },
+      });
+      return;
     }
 
     res.status(201).json({ message: "User created successfully", verification:{ token, email, expiry:{duration:10, parameter:"minutes"} } });
@@ -113,6 +122,18 @@ export async function signupVerification(req:Request, res:Response):Promise<void
         res.status(400).json({ message: "Invalid verification token", error:"bad token" });
         return;
         }
+        if (verificationToken.type !== "EMAIL_VERIFICATION_SIGNUP") {
+            res.status(400).json({ message: "Invalid verification token type", error:"bad token" });
+            return;
+        }
+        if (verificationToken.verified) {
+            res.status(409).json({ message: "Verification token already used", error:"token_already_used" });
+            return;
+        }
+        if (verificationToken.failedAttempts >= 5) {
+            res.status(429).json({ message: "Too many failed OTP attempts. Please request a new code.", error:"otp_locked" });
+            return;
+        }
         const expiresAt = verificationToken.expiresAt;
         if (expiresAt < new Date()) {
             res.status(400).json({ message: "Expired token, request a new otp code", error:"bad token" });
@@ -120,28 +141,43 @@ export async function signupVerification(req:Request, res:Response):Promise<void
         }
 
         const storedOtpHash = verificationToken.otpHash;
-        const isMatch = await bcrypt.compare(otp, storedOtpHash);
+        const isMatch = verifyOtp(otp, storedOtpHash);
         if (!isMatch) {
+            const updatedRows = await prisma.$queryRaw<{ failedAttempts: number }[]>`
+                UPDATE "VerificationToken"
+                SET "failedAttempts" = "failedAttempts" + 1
+                WHERE "id" = ${verificationToken.id}
+                  AND "failedAttempts" < 5
+                  AND "consumedAt" IS NULL
+                  AND "verified" = false
+                RETURNING "failedAttempts"
+            `;
+            if (updatedRows.length === 0 || updatedRows[0].failedAttempts >= 5) {
+                res.status(429).json({ message: "Too many failed OTP attempts. Please request a new code.", error:"otp_locked" });
+                return;
+            }
             res.status(400).json({ message: "Invalid otp code ", error:"bad token" });
             return;
         }
         
         const now = new Date();
-        Promise.all([
-            await prisma.user.update({
+        await Promise.all([
+            prisma.user.update({
                 where:{id:verificationToken.userId},
                 data:{
-                    isEmailVerified:true
+                    isEmailVerified:true,
+                    accountStatus:"ACTIVE"
                 }
             }),
-            await prisma.verificationToken.update({
+            prisma.verificationToken.update({
                 where:{id:verificationToken.id},
                 data:{
                     verified:true,
                     verifiedAt:now,
+                    consumedAt:now,
                 }
             })
-        ])
+        ]);
 
         let session = await startSession(verificationToken.userId);
         if (!session.success) {
@@ -153,9 +189,13 @@ export async function signupVerification(req:Request, res:Response):Promise<void
             return;
         }
 
+        if (session.session) {
+            setSessionCookies(req, res, session.session.accessToken, session.session.refreshToken);
+        }
+
         res.status(200).json({
             success:true, 
-            session, 
+            session: session.session ? { accessToken: session.session.accessToken } : null, 
             user:{
                 id:verificationToken.userId, 
                 username:verificationToken.user.username, 
