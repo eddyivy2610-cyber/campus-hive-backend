@@ -145,6 +145,30 @@ export async function getPublicStore(req: AuthenticatedRequest, res: Response): 
   }
 }
 
+export async function listPublicStores(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const rawLimit = Number.parseInt(String(req.query.limit || "20"), 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 50) : 20;
+    const campus = typeof req.query.campus === "string" ? req.query.campus.trim() : "";
+
+    const stores = await prisma.store.findMany({
+      where: {
+        status: "active",
+        ...(campus ? { campus } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+
+    const data = stores.map((s) => toPublicStore(s));
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.status(200).json({ success: true, data, stores: data });
+  } catch (err) {
+    console.error("Error listing public stores:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 export async function updateStore(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const userId = req.auth?.userId;

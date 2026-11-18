@@ -175,3 +175,30 @@ export async function createDeal(req: AuthenticatedRequest, res: Response): Prom
     res.status(500).json({ message: "Internal server error" });
   }
 }
+
+export async function listConversations(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized", error: "unauthorized" });
+      return;
+    }
+    const rawLimit = Number.parseInt(String(req.query.limit || "30"), 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 30;
+
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        OR: [{ participantA: userId }, { participantB: userId }],
+      },
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+      include: {
+        messages: { orderBy: { createdAt: "desc" }, take: 1 },
+      },
+    });
+    res.status(200).json({ success: true, data: conversations, conversations });
+  } catch (err) {
+    console.error("List conversations error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}

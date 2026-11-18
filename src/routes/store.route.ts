@@ -5,11 +5,13 @@ import {
   deleteStore,
   getPublicStore,
   listMyStores,
+  listPublicStores,
   updateStore,
 } from "../controllers/store.controller.ts";
 
 const router = Router();
 
+router.get("/", listPublicStores);
 router.get("/me", authenticate, listMyStores);
 router.post("/", authenticate, createStore);
 router.get("/:slug", getPublicStore);

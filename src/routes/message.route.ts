@@ -3,6 +3,7 @@ import { authenticate } from "../middlewares/auth.middleware.ts";
 import {
   createConversation,
   getConversationMessages,
+  listConversations,
   sendMessage,
   createOffer,
   createDeal,
@@ -10,6 +11,7 @@ import {
 
 const router = Router();
 
+router.get("/conversations", authenticate, listConversations);
 router.post("/conversations", authenticate, createConversation);
 router.get("/conversations/:id", authenticate, getConversationMessages);
 router.post("/conversations/:id/messages", authenticate, sendMessage);
