@@ -36,52 +36,64 @@ router.post("/login", loginRateLimiter, signin);
 router.post("/password-reset/request", otpIpRateLimiter, requestVerificationForForgetPassword);
 router.post("/password-reset/confirm", processVerificationForForgetPassword);
 router.post("/verify-otp", async (req: Request, res: Response) => {
-  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
-  const otp = req.body?.otp ?? req.body?.code;
-  if (otp !== undefined) req.body.otp = otp;
-  if (!req.params.token && email) {
-    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-    if (user) {
-      const vt = await prisma.verificationToken.findFirst({
-        where: {
-          userId: user.id,
-          type: { in: ["EMAIL_VERIFICATION_SIGNUP", "SIGNUP"] },
-          verified: false,
-        },
-        orderBy: { createdAt: "desc" },
-        select: { token: true },
-      });
-      if (vt) req.params.token = vt.token;
+  try {
+    req.params = req.params || {};
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const otp = req.body?.otp ?? req.body?.code;
+    if (otp !== undefined) req.body.otp = otp;
+    if (!req.params.token && email) {
+      const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (user) {
+        const vt = await prisma.verificationToken.findFirst({
+          where: {
+            userId: user.id,
+            type: { in: ["EMAIL_VERIFICATION_SIGNUP", "SIGNUP"] },
+            verified: false,
+          },
+          orderBy: { createdAt: "desc" },
+          select: { token: true },
+        });
+        if (vt) req.params.token = vt.token;
+      }
     }
+    return await signupVerification(req, res);
+  } catch (err) {
+    console.error("[verify-otp alias] Error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
-  return signupVerification(req, res);
 });
 
 async function handleResendByEmail(req: Request, res: Response) {
-  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
-  if (!req.params.token && email) {
-    const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-    if (user) {
-      const vt = await prisma.verificationToken.findFirst({
-        where: {
-          userId: user.id,
-          type: { in: ["EMAIL_VERIFICATION_SIGNUP", "SIGNUP"] },
-          verified: false,
-        },
-        orderBy: { createdAt: "desc" },
-        select: { token: true },
-      });
-      if (vt) req.params.token = vt.token;
+  try {
+    req.params = req.params || {};
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (!req.params.token && email) {
+      const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (user) {
+        const vt = await prisma.verificationToken.findFirst({
+          where: {
+            userId: user.id,
+            type: { in: ["EMAIL_VERIFICATION_SIGNUP", "SIGNUP"] },
+            verified: false,
+          },
+          orderBy: { createdAt: "desc" },
+          select: { token: true },
+        });
+        if (vt) req.params.token = vt.token;
+      }
     }
+    if (!req.params.token) {
+      res.status(200).json({
+        success: true,
+        message: "If an unverified account exists for this email, a new verification code has been sent.",
+      });
+      return;
+    }
+    return await requestNewVerificationTokenCode(req, res);
+  } catch (err) {
+    console.error("[send-otp alias] Error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
-  if (!req.params.token) {
-    res.status(200).json({
-      success: true,
-      message: "If an unverified account exists for this email, a new verification code has been sent.",
-    });
-    return;
-  }
-  return requestNewVerificationTokenCode(req, res);
 }
 
 router.post("/send-otp-to-email", otpIpRateLimiter, handleResendByEmail);
