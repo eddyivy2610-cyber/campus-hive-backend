@@ -193,16 +193,27 @@ export async function signupVerification(req:Request, res:Response):Promise<void
             setSessionCookies(req, res, session.session.accessToken, session.session.refreshToken);
         }
 
+        const u = verificationToken.user;
         res.status(200).json({
-            success:true, 
-            session: session.session ? { accessToken: session.session.accessToken } : null, 
-            user:{
-                id:verificationToken.userId, 
-                username:verificationToken.user.username, 
-                profileImage:verificationToken.user.profileImage || null, 
-                role:verificationToken.user.role
-            }, 
-            message:"Session created successfully"
+            success: true,
+            token: session.session ? session.session.accessToken : undefined,
+            session: session.session ? { accessToken: session.session.accessToken } : null,
+            user: {
+                id: verificationToken.userId,
+                email: u.email,
+                name: u.displayName || u.fullName || u.username,
+                username: u.username,
+                profileImage: u.profileImage || null,
+                role: u.role,
+                emailVerified: true,
+                onboardingStep: "email_verified",
+                profile: {
+                    displayName: u.displayName || u.fullName || u.username,
+                    handle: u.username,
+                    avatar: u.profileImage || null,
+                },
+            },
+            message: "Session created successfully",
         });
 
     } catch (error) {

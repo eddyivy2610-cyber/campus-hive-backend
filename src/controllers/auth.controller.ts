@@ -242,8 +242,18 @@ export async function getMe(req: AuthenticatedRequest, res: Response): Promise<v
             res.status(401).json({ message: "User not found", error: "unauthorized" });
             return;
         }
+        const formatted = {
+            ...user,
+            name: user.displayName || user.fullName || user.username,
+            emailVerified: Boolean(user.isEmailVerified),
+            profile: {
+                displayName: user.displayName || user.fullName || user.username,
+                handle: user.username,
+                avatar: user.profileImage || null,
+            },
+        };
         res.setHeader("Cache-Control", "private, no-store");
-        res.status(200).json({ success: true, user });
+        res.status(200).json({ success: true, user: formatted, data: formatted });
     } catch (error) {
         console.error("Error in getMe:", error);
         res.status(500).json({ message: "Internal server error" });

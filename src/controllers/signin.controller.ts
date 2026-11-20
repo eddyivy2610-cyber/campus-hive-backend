@@ -69,15 +69,24 @@ export async function signin(req:Request, res:Response):Promise<void> {
         }
 
         res.status(200).json({
-            success:true, 
-            session: session.session ? { accessToken: session.session.accessToken } : null, 
-            user:{
-                id:user.id, 
-                username:user.username, 
-                profileImage:user.profileImage || null, 
-                role:user.role
-            }, 
-            message:"Session created successfully"
+            success: true,
+            token: session.session ? session.session.accessToken : undefined,
+            session: session.session ? { accessToken: session.session.accessToken } : null,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.displayName || user.fullName || user.username,
+                username: user.username,
+                profileImage: user.profileImage || null,
+                role: user.role,
+                emailVerified: Boolean(user.isEmailVerified),
+                profile: {
+                    displayName: user.displayName || user.fullName || user.username,
+                    handle: user.username,
+                    avatar: user.profileImage || null,
+                },
+            },
+            message: "Session created successfully",
         });
 
     } catch (error) {
