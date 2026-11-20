@@ -116,3 +116,18 @@ export type Notification = Prisma.NotificationModel
  * 
  */
 export type Banner = Prisma.BannerModel
+/**
+ * Model AdminLog
+ * 
+ */
+export type AdminLog = Prisma.AdminLogModel
+/**
+ * Model Report
+ * 
+ */
+export type Report = Prisma.ReportModel
+/**
+ * Model SellerApplication
+ * 
+ */
+export type SellerApplication = Prisma.SellerApplicationModel

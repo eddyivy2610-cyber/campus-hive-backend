@@ -65,7 +65,10 @@ export const ModelName = {
   Message: 'Message',
   UserPreference: 'UserPreference',
   Notification: 'Notification',
-  Banner: 'Banner'
+  Banner: 'Banner',
+  AdminLog: 'AdminLog',
+  Report: 'Report',
+  SellerApplication: 'SellerApplication'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -342,6 +345,59 @@ export const BannerScalarFieldEnum = {
 } as const
 
 export type BannerScalarFieldEnum = (typeof BannerScalarFieldEnum)[keyof typeof BannerScalarFieldEnum]
+
+
+export const AdminLogScalarFieldEnum = {
+  id: 'id',
+  adminId: 'adminId',
+  adminEmail: 'adminEmail',
+  action: 'action',
+  targetType: 'targetType',
+  targetId: 'targetId',
+  details: 'details',
+  createdAt: 'createdAt'
+} as const
+
+export type AdminLogScalarFieldEnum = (typeof AdminLogScalarFieldEnum)[keyof typeof AdminLogScalarFieldEnum]
+
+
+export const ReportScalarFieldEnum = {
+  id: 'id',
+  reporterId: 'reporterId',
+  targetType: 'targetType',
+  targetId: 'targetId',
+  reason: 'reason',
+  details: 'details',
+  status: 'status',
+  resolutionNote: 'resolutionNote',
+  resolvedBy: 'resolvedBy',
+  resolvedAt: 'resolvedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ReportScalarFieldEnum = (typeof ReportScalarFieldEnum)[keyof typeof ReportScalarFieldEnum]
+
+
+export const SellerApplicationScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  storeId: 'storeId',
+  businessName: 'businessName',
+  category: 'category',
+  campus: 'campus',
+  operatingLocation: 'operatingLocation',
+  studentIdUrl: 'studentIdUrl',
+  notes: 'notes',
+  status: 'status',
+  reviewNote: 'reviewNote',
+  reviewedBy: 'reviewedBy',
+  reviewedAt: 'reviewedAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type SellerApplicationScalarFieldEnum = (typeof SellerApplicationScalarFieldEnum)[keyof typeof SellerApplicationScalarFieldEnum]
 
 
 export const SortOrder = {
