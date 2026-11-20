@@ -66,12 +66,59 @@ export const sendEmailService = async ({
   htmlContent,
 }: SendEmailServiceParams) => {
   try {
+    const html = htmlContent ?? renderPlainEmail(title, text);
+    const brevoApiKey = process.env.BREVO_API_KEY?.trim();
+    if (brevoApiKey) {
+      const senderEmail = process.env.EMAIL_FROM_ADDRESS?.trim() || fromAddress;
+      const senderName = process.env.EMAIL_FROM_NAME?.trim() || "CampusHive";
+      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "api-key": brevoApiKey,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          sender: { name: senderName, email: senderEmail },
+          to: [{ email: to }],
+          subject: title,
+          htmlContent: html,
+          textContent: text,
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        throw new Error(`Brevo HTTP ${res.status}: ${errBody}`);
+      }
+      console.info(`Email sent successfully via Brevo to ${to}`);
+      return { success: true, message: "Email sent successfully" };
+    }
+
+    const resendApiKey = process.env.RESEND_API_KEY?.trim();
+    if (resendApiKey) {
+      const from = process.env.EMAIL_FROM?.trim() || "CampusHive <onboarding@resend.dev>";
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ from, to, subject: title, text, html }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        throw new Error(`Resend HTTP ${res.status}: ${errBody}`);
+      }
+      console.info(`Email sent successfully via Resend to ${to}`);
+      return { success: true, message: "Email sent successfully" };
+    }
+
     await getEmailTransporter().sendMail({
       from: `"CampusHive" <${fromAddress}>`,
       to,
       subject: title,
       text,
-      html: htmlContent ?? renderPlainEmail(title, text),
+      html,
     });
 
     console.info(`Email sent successfully to ${to}`);
