@@ -105,7 +105,18 @@ export async function listMyStores(req: AuthenticatedRequest, res: Response): Pr
       },
     });
 
-    res.status(200).json({ success: true, data: { stores }, stores });
+    const formatted = stores.map((s) => toPublicStore(s));
+    res.status(200).json({
+      success: true,
+      data: {
+        stores: formatted,
+        store: formatted[0] || null,
+        hasStore: formatted.length > 0,
+        maxStores: MAX_STORES_PER_USER,
+        canCreateMore: formatted.length < MAX_STORES_PER_USER,
+      },
+      stores: formatted,
+    });
   } catch (err) {
     console.error("Error listing my stores:", err);
     res.status(500).json({ message: "Internal server error" });
