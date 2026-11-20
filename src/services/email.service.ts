@@ -146,16 +146,26 @@ interface SendOtpEmailParams {
 // brand colors and styles for the email templates :gold, white and black
 
 const BRAND = {
-  primary: "#f8ec08",
-  darkPrimary: "#e1b609",
-  lightPrimary: "#f9ef37",
-  midPrimary: "#f9f487",
-  extraLightPrimary: "#fdf78f",
-  text: "#2e271a",
-  muted: "#6B7280",
-  border: "#e3e6ff",
+  primary: "#CA8A04",
+  darkPrimary: "#A16207",
+  lightPrimary: "#F8FAFC",
+  midPrimary: "#0F172A",
+  extraLightPrimary: "#F1F5F9",
+  text: "#0F172A",
+  muted: "#64748B",
+  border: "#E2E8F0",
   cardBg: "#FFFFFF",
 };
+
+function getLogoUrl(): string {
+  const explicit = process.env.EMAIL_LOGO_URL?.trim();
+  if (explicit) return explicit;
+  const origin = process.env.CLIENT_ORIGIN?.split(",")[0]?.trim().replace(/\/$/, "");
+  if (origin && /^https?:\/\//i.test(origin) && !origin.includes("localhost") && !origin.includes("127.0.0.1")) {
+    return `${origin}/LOGO.png`;
+  }
+  return "";
+}
 
 const purposeConfig: Record<
   OtpPurpose,
@@ -203,27 +213,20 @@ const purposeConfig: Record<
  * so it reads clearly and matches typical OTP-input UI patterns.
  */
 function renderOtpBoxes(otp: string): string {
-  return otp
-    .split("")
-    .map(
-      (digit) => `
-        <td style="padding: 0 4px;">
-          <div style="
-            width: 40px;
-            height: 48px;
-            line-height: 48px;
-            text-align: center;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 24px;
-            font-weight: 700;
-            color: ${BRAND.primary};
-            background-color: ${BRAND.lightPrimary};
-            border: 1px solid ${BRAND.border};
-            border-radius: 8px;
-          ">${escapeHtml(digit)}</div>
-        </td>`
-    )
-    .join("");
+  const spaced = otp.split("").map((d) => escapeHtml(d)).join("&nbsp;&nbsp;");
+  return `
+    <td style="
+      padding: 18px 32px;
+      background-color: #F8FAFC;
+      border: 1.5px dashed #CBD5E1;
+      border-radius: 12px;
+      text-align: center;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: #0F172A;
+    ">${spaced}</td>`;
 }
 
 /**
@@ -231,6 +234,11 @@ function renderOtpBoxes(otp: string): string {
  * — OTP, KYC, and future ones — shares one layout and one place to update it.
  */
 function renderEmailLayout(subject: string, bodyHtml: string): string {
+  const logoUrl = getLogoUrl();
+  const logoImg = logoUrl
+    ? `<img src="${escapeHtml(logoUrl)}" alt="CampusHive" width="32" height="32" style="display:inline-block; vertical-align:middle; border-radius:6px; margin-right:10px; border:0;" />`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -240,16 +248,21 @@ function renderEmailLayout(subject: string, bodyHtml: string): string {
 <meta name="supported-color-schemes" content="light" />
 <title>${escapeHtml(subject)}</title>
 </head>
-<body style="margin:0; padding:0; background-color:${BRAND.extraLightPrimary}; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${BRAND.extraLightPrimary}; padding: 32px 16px;">
+<body style="margin:0; padding:0; background-color:${BRAND.extraLightPrimary}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${BRAND.extraLightPrimary}; padding: 36px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px; width:100%; background-color:${BRAND.cardBg}; border:1px solid ${BRAND.border}; border-top:3px solid ${BRAND.primary}; border-radius:8px; overflow:hidden;">
+        <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px; width:100%; background-color:${BRAND.cardBg}; border:1px solid ${BRAND.border}; border-top:4px solid #EAB308; border-radius:14px; overflow:hidden;">
 
           <!-- Header -->
           <tr>
-            <td style="padding: 24px 32px; border-bottom:1px solid ${BRAND.border};">
-              <span style="font-size:18px; font-weight:700; color:${BRAND.darkPrimary}; letter-spacing:0.2px;">CampusHive</span>
+            <td align="center" style="padding: 28px 32px 20px; border-bottom:1px solid ${BRAND.border};">
+              <div>
+                ${logoImg}<span style="font-size:20px; font-weight:700; color:${BRAND.text}; vertical-align:middle;">CampusHive</span>
+              </div>
+              <p style="margin:6px 0 0; font-size:13px; color:${BRAND.muted};">
+                Student Marketplace &amp; Community
+              </p>
             </td>
           </tr>
 
@@ -262,10 +275,9 @@ function renderEmailLayout(subject: string, bodyHtml: string): string {
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 20px 32px; border-top: 1px solid ${BRAND.border};">
+            <td align="center" style="padding: 18px 32px; border-top: 1px solid ${BRAND.border}; background-color:#FAFAFA;">
               <p style="margin:0; font-size:12px; color:${BRAND.muted};">
-                From swiping to showing up.<br/>
-                <span style="color:${BRAND.text}; font-weight:600;">The CampusHive Team</span>
+                CampusHive &bull; Connecting university students across campuses
               </p>
             </td>
           </tr>
@@ -280,34 +292,23 @@ function renderEmailLayout(subject: string, bodyHtml: string): string {
 
 function renderHtml(otp: string, config: (typeof purposeConfig)[OtpPurpose]): string {
   const body = `
-    <h1 style="margin:0 0 12px; font-size:22px; line-height:1.3; color:${BRAND.text};">
-      ${config.heading} ${config.emoji}
+    <h1 style="margin:0 0 10px; font-size:20px; font-weight:700; line-height:1.35; color:${BRAND.text};">
+      ${escapeHtml(config.heading)}
     </h1>
     <p style="margin:0 0 24px; font-size:15px; line-height:1.6; color:${BRAND.muted};">
-      ${config.intro}
-    </p>
-    <p style="margin:0 0 16px; font-size:15px; line-height:1.6; color:${BRAND.text};">
-      Enter this code to ${config.action}:
+      ${escapeHtml(config.intro)} Use the 6-digit code below to ${escapeHtml(config.action)}.
     </p>
 
-    <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto 20px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
       <tr>${renderOtpBoxes(otp)}</tr>
     </table>
 
-    <p style="margin:0 0 4px; font-size:13px; text-align:center; color:${BRAND.muted};">
-      This code expires in <strong style="color:${BRAND.text};">10 minutes</strong>.
+    <p style="margin:0 0 8px; font-size:13px; color:${BRAND.muted};">
+      This code will expire in <strong style="color:${BRAND.text};">10 minutes</strong>.
     </p>
-    <p style="margin:0 0 28px; font-size:13px; text-align:center; color:${BRAND.muted};">
-      Never share this code — not even with CampusHive staff.
-    </p>
-
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${BRAND.lightPrimary}; border-radius:10px; padding:16px;">
-      <tr>
-        <td style="font-size:13px; line-height:1.5; color:${BRAND.muted};">
-          Didn't request this? You can safely ignore this email — your account is still secure.
-        </td>
-      </tr>
-    </table>`;
+    <p style="margin:0; font-size:13px; color:${BRAND.muted};">
+      If you did not request this verification code, you can safely ignore this email.
+    </p>`;
 
   return renderEmailLayout(config.subject, body);
 }
