@@ -37,7 +37,7 @@ export function setSessionCookies(
     httpOnly: true,
     secure: isSecure,
     sameSite: "lax",
-    path: "/api/v1/auth",
+    path: "/api",
     maxAge: 7 * DAY_IN_MS,
   });
 }

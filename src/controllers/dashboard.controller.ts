@@ -34,17 +34,69 @@ export async function getSellerStats(req: AuthenticatedRequest, res: Response): 
       orderWhere.storeId = scopedStoreId;
     }
 
-    const [storesCount, activeListingsCount, orderGroups, reviewsCount] = await Promise.all([
-      prisma.store.count({ where: { ownerId: targetSellerId, status: { not: "deleted" } } }),
-      prisma.listing.count({ where: { sellerId: targetSellerId, status: "active" } }),
+    const listingWhere: any = { sellerId: targetSellerId, status: { not: "deleted" } };
+    const storeWhere: any = { ownerId: targetSellerId, status: { not: "deleted" } };
+    if (scopedStoreId) {
+      listingWhere.storeId = scopedStoreId;
+      storeWhere.id = scopedStoreId;
+    }
+
+    const [stores, listings, orderGroups, reviewsAgg, recentOrders] = await Promise.all([
+      prisma.store.findMany({
+        where: storeWhere,
+        select: { id: true, name: true, followersCount: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.listing.findMany({
+        where: listingWhere,
+        select: { id: true, title: true, price: true, category: true, status: true },
+        orderBy: { createdAt: "desc" },
+      }),
       prisma.order.groupBy({
         by: ["status"],
         where: orderWhere,
         _count: { _all: true },
         _sum: { totalAmount: true },
       }),
-      prisma.review.count({ where: { sellerId: targetSellerId } }),
+      prisma.review.aggregate({
+        where: { sellerId: targetSellerId },
+        _count: { _all: true },
+        _avg: { rating: true },
+      }),
+      prisma.order.findMany({
+        where: orderWhere,
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          status: true,
+          totalAmount: true,
+          createdAt: true,
+          buyer: { select: { displayName: true, fullName: true, username: true } },
+        },
+      }),
     ]);
+
+    const storesCount = stores.length;
+    const primaryStore = stores[0] || null;
+    const activeListings = listings.filter((l) => l.status === "active");
+    const activeListingsCount = activeListings.length;
+    const inactiveListingsCount = listings.length - activeListingsCount;
+    const reviewsCount = Number(reviewsAgg._count?._all ?? 0);
+    const storeRating = Number(reviewsAgg._avg?.rating ?? 0);
+    const followersCount = stores.reduce((sum, s) => sum + Number(s.followersCount ?? 0), 0);
+
+    const categoryMap = new Map<string, number>();
+    for (const l of listings) {
+      const cat = l.category || "Other";
+      categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1);
+    }
+    const categories = Array.from(categoryMap.entries()).map(([category, count]) => ({
+      category,
+      count,
+    }));
+
+    const formatNaira = (amount: number) => `₦${Math.round(amount).toLocaleString("en-NG")}`;
 
     const byStatus: Record<string, number> = {
       pending: 0,
@@ -84,10 +136,19 @@ export async function getSellerStats(req: AuthenticatedRequest, res: Response): 
       data: {
         sellerId: targetSellerId,
         scopedStoreId: scopedStoreId || null,
+        generatedAt: new Date().toISOString(),
         storesCount,
         activeListingsCount,
         ordersCount: totalOrders,
         reviewsCount,
+        listings: {
+          total: listings.length,
+          active: activeListingsCount,
+          inactive: inactiveListingsCount,
+          products: listings.length,
+          services: 0,
+          categories,
+        },
         orders: {
           totalOrders,
           byStatus,
@@ -98,9 +159,44 @@ export async function getSellerStats(req: AuthenticatedRequest, res: Response): 
         },
         orderValue: {
           completedOrderValue,
+          completedOrderValueFormatted: formatNaira(completedOrderValue),
           activeOrderValue,
+          activeOrderValueFormatted: formatNaira(activeOrderValue),
           currency: "NGN",
         },
+        audience: {
+          followersCount,
+          impressions: 0,
+        },
+        store: {
+          hasStore: storesCount > 0,
+          storeId: primaryStore?.id ?? null,
+          storeName: primaryStore?.name ?? null,
+          storeRating: Number(storeRating.toFixed(1)),
+          storedListingsCount: listings.length,
+          driftDetected: false,
+        },
+        recentActivity: recentOrders.map((o) => ({
+          id: o.id,
+          orderId: o.id,
+          status: o.status,
+          totalAmount: Number(o.totalAmount ?? 0),
+          priceFormatted: formatNaira(Number(o.totalAmount ?? 0)),
+          itemSummary: "Order",
+          buyerDisplayName:
+            o.buyer?.displayName || o.buyer?.fullName || o.buyer?.username || "Buyer",
+          createdAt: o.createdAt.toISOString(),
+        })),
+        topItems: listings.slice(0, 5).map((l) => ({
+          id: l.id,
+          title: l.title,
+          views: 0,
+          price: Number(l.price ?? 0),
+          priceFormatted: formatNaira(Number(l.price ?? 0)),
+          image: "",
+          category: l.category || "Other",
+          status: l.status,
+        })),
       },
     });
   } catch (err) {

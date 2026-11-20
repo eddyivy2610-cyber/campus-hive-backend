@@ -121,6 +121,30 @@ function getCookieClearOptions(req: Request, path = "/") {
     };
 }
 
+function formatAuthUser(user: {
+    id: string;
+    email: string;
+    username: string;
+    fullName: string | null;
+    displayName: string | null;
+    profileImage: string | null;
+    role: string;
+    isEmailVerified: boolean;
+    accountStatus: string;
+    createdAt?: Date;
+}) {
+    return {
+        ...user,
+        name: user.displayName || user.fullName || user.username,
+        emailVerified: Boolean(user.isEmailVerified),
+        profile: {
+            displayName: user.displayName || user.fullName || user.username,
+            handle: user.username,
+            avatar: user.profileImage || null,
+        },
+    };
+}
+
 export async function refreshToken(req:Request, res:Response) {
     try {
         const rawRefresh = req.cookies?.refreshToken;
@@ -209,7 +233,12 @@ export async function refreshToken(req:Request, res:Response) {
         const accessToken = generateAccessToken(user.id, session.id, user.tokenVersion);
         setSessionCookies(req, res, accessToken, nextOpaque.token);
 
-        res.status(200).json({success:true, session:{accessToken}});
+        res.status(200).json({
+            success: true,
+            token: accessToken,
+            user: formatAuthUser(user),
+            session: { accessToken },
+        });
     } catch (error:any) {
         console.error("Refresh failed:", error?.message || error || "Unknown error");
         res.status(500).json({ message: "Internal server error" });
@@ -242,16 +271,7 @@ export async function getMe(req: AuthenticatedRequest, res: Response): Promise<v
             res.status(401).json({ message: "User not found", error: "unauthorized" });
             return;
         }
-        const formatted = {
-            ...user,
-            name: user.displayName || user.fullName || user.username,
-            emailVerified: Boolean(user.isEmailVerified),
-            profile: {
-                displayName: user.displayName || user.fullName || user.username,
-                handle: user.username,
-                avatar: user.profileImage || null,
-            },
-        };
+        const formatted = formatAuthUser(user);
         res.setHeader("Cache-Control", "private, no-store");
         res.status(200).json({ success: true, user: formatted, data: formatted });
     } catch (error) {
@@ -279,6 +299,7 @@ export async function logout(req: AuthenticatedRequest, res: Response): Promise<
             })
         ]);
         res.clearCookie("accessToken", getCookieClearOptions(req, "/"));
+        res.clearCookie("refreshToken", getCookieClearOptions(req, "/api"));
         res.clearCookie("refreshToken", getCookieClearOptions(req, "/api/v1/auth"));
         res.status(200).json({ success: true, message: "Logged out successfully" });
     } catch (error) {
@@ -310,6 +331,7 @@ export async function logoutAll(req: AuthenticatedRequest, res: Response): Promi
             })
         ]);
         res.clearCookie("accessToken", getCookieClearOptions(req, "/"));
+        res.clearCookie("refreshToken", getCookieClearOptions(req, "/api"));
         res.clearCookie("refreshToken", getCookieClearOptions(req, "/api/v1/auth"));
         res.status(200).json({ success: true, message: "All sessions revoked successfully" });
     } catch (error) {
