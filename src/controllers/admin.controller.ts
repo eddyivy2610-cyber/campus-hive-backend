@@ -7,8 +7,8 @@ export async function adminUpdateStoreStatus(req: AuthenticatedRequest, res: Res
   try {
     const storeId = String(req.params.id || "");
     const { action, reason } = req.body || {};
-    if (action !== "suspend" && action !== "restore") {
-      res.status(400).json({ message: "Invalid action; expected 'suspend' or 'restore'", error: "bad_request" });
+    if (action !== "suspend" && action !== "restore" && action !== "approve") {
+      res.status(400).json({ message: "Invalid action; expected 'suspend', 'restore', or 'approve'", error: "bad_request" });
       return;
     }
 

@@ -28,7 +28,63 @@ router.use("/messages", messageRoute);
 router.use("/dashboard", dashboardRoute);
 
 // Frontend (campushive) compatibility endpoints
-router.get("/users/profile", authenticate, getMe);
+router.get("/users/profile", async (req, res, next) => {
+  const rawHandle = typeof req.query.handle === "string" ? req.query.handle.trim().replace(/^@/, "").toLowerCase() : "";
+  if (!rawHandle) {
+    return authenticate(req as AuthenticatedRequest, res, () => getMe(req as AuthenticatedRequest, res));
+  }
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username: rawHandle },
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        displayName: true,
+        profileImage: true,
+        role: true,
+        createdAt: true,
+        stores: {
+          where: { status: "active" },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            category: true,
+            campus: true,
+            operatingLocation: true,
+            status: true,
+            followersCount: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+    const activeStores = (user.stores || []).map((s) => ({ ...s, _id: s.id }));
+    const formatted = {
+      ...user,
+      _id: user.id,
+      name: user.displayName || user.fullName || user.username,
+      profile: {
+        displayName: user.displayName || user.fullName || user.username,
+        handle: user.username,
+        avatar: user.profileImage || null,
+      },
+      stores: activeStores,
+      store: activeStores[0] || null,
+      storeId: activeStores[0]?.id || null,
+    };
+    res.status(200).json({ success: true, data: formatted, user: formatted });
+  } catch (err) {
+    next(err);
+  }
+});
 router.patch("/users/profile", authenticate, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.auth?.userId;

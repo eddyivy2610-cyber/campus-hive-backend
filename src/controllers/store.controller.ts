@@ -58,6 +58,7 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
           name: name.trim(),
           slug: rawSlug,
           slugLower,
+          status: "pending_review",
           description: typeof description === "string" ? description : null,
           category: typeof category === "string" ? category : null,
           campus: typeof campus === "string" ? campus : null,
@@ -106,12 +107,19 @@ export async function listMyStores(req: AuthenticatedRequest, res: Response): Pr
     });
 
     const formatted = stores.map((s) => toPublicStore(s));
+    const activeStores = formatted.filter((s) => s.status === "active");
+    const pendingStores = formatted.filter(
+      (s) => s.status === "pending_review" || s.status === "pending"
+    );
     res.status(200).json({
       success: true,
       data: {
         stores: formatted,
-        store: formatted[0] || null,
-        hasStore: formatted.length > 0,
+        activeStores,
+        store: activeStores[0] || null,
+        pendingStore: pendingStores[0] || null,
+        hasStore: activeStores.length > 0,
+        hasPendingApplication: pendingStores.length > 0,
         maxStores: MAX_STORES_PER_USER,
         canCreateMore: formatted.length < MAX_STORES_PER_USER,
       },

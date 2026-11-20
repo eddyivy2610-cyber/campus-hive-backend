@@ -265,13 +265,35 @@ export async function getMe(req: AuthenticatedRequest, res: Response): Promise<v
                 isEmailVerified: true,
                 accountStatus: true,
                 createdAt: true,
+                stores: {
+                    where: { status: "active" },
+                    select: {
+                        id: true,
+                        name: true,
+                        slug: true,
+                        description: true,
+                        category: true,
+                        campus: true,
+                        operatingLocation: true,
+                        status: true,
+                        followersCount: true,
+                        createdAt: true,
+                    },
+                    orderBy: { createdAt: "desc" },
+                },
             }
         });
         if (!user) {
             res.status(401).json({ message: "User not found", error: "unauthorized" });
             return;
         }
-        const formatted = formatAuthUser(user);
+        const activeStores = (user.stores || []).map((s) => ({ ...s, _id: s.id }));
+        const formatted = {
+            ...formatAuthUser(user),
+            stores: activeStores,
+            store: activeStores[0] || null,
+            storeId: activeStores[0]?.id || null,
+        };
         res.setHeader("Cache-Control", "private, no-store");
         res.status(200).json({ success: true, user: formatted, data: formatted });
     } catch (error) {
