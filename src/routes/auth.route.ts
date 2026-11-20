@@ -47,7 +47,7 @@ router.post("/verify-otp", async (req: Request, res: Response) => {
         const vt = await prisma.verificationToken.findFirst({
           where: {
             userId: user.id,
-            type: { in: ["EMAIL_VERIFICATION_SIGNUP", "SIGNUP"] },
+            type: "EMAIL_VERIFICATION_SIGNUP",
             verified: false,
           },
           orderBy: { createdAt: "desc" },
@@ -73,7 +73,7 @@ async function handleResendByEmail(req: Request, res: Response) {
         const vt = await prisma.verificationToken.findFirst({
           where: {
             userId: user.id,
-            type: { in: ["EMAIL_VERIFICATION_SIGNUP", "SIGNUP"] },
+            type: "EMAIL_VERIFICATION_SIGNUP",
             verified: false,
           },
           orderBy: { createdAt: "desc" },
