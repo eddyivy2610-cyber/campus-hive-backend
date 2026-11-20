@@ -12,6 +12,12 @@ const PUBLIC_STORE_SELECT = {
   category: true,
   campus: true,
   operatingLocation: true,
+  logo: true,
+  coverImage: true,
+  storeType: true,
+  isVerified: true,
+  verificationType: true,
+  vacationMode: true,
   status: true,
   followersCount: true,
   createdAt: true,
@@ -25,7 +31,7 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const { name, slug, description, category, campus, operatingLocation } = req.body || {};
+    const { name, slug, description, category, campus, operatingLocation, logo, coverImage, storeType } = req.body || {};
     if (!name || typeof name !== "string" || !name.trim()) {
       res.status(400).json({ message: "Store name is required", error: "bad_request" });
       return;
@@ -63,6 +69,9 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
           category: typeof category === "string" ? category : null,
           campus: typeof campus === "string" ? campus : null,
           operatingLocation: typeof operatingLocation === "string" ? operatingLocation : null,
+          logo: typeof logo === "string" ? logo : null,
+          coverImage: typeof coverImage === "string" ? coverImage : null,
+          storeType: storeType === "local_business" ? "local_business" : "student_store",
         },
         select: {
           ...PUBLIC_STORE_SELECT,

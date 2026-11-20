@@ -32,7 +32,7 @@ function getEmailTransporter(): nodemailer.Transporter {
           pass: process.env.EMAIL_APP_PASSWORD,
         }
       : undefined,
-  });
+  } as nodemailer.TransportOptions);
 
   return transporter;
 }

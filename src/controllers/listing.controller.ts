@@ -1,7 +1,45 @@
+import crypto from "node:crypto";
 import { Request, Response } from "express";
 import prisma from "../prisma.ts";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 import { toPublicListing } from "../lib/serializers.ts";
+
+const VIEW_DEDUP_WINDOW_SECONDS = 24 * 60 * 60;
+const devMemoryViewCache = new Map<string, number>();
+
+async function acquireViewDedupLock(key: string): Promise<boolean> {
+  const url = process.env.UPSTASH_REDIS_REST_URL?.replace(/\/$/, "");
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) {
+    try {
+      const response = await fetch(`${url}/pipeline`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([
+          ["SET", key, "1", "EX", String(VIEW_DEDUP_WINDOW_SECONDS), "NX"],
+        ]),
+      });
+      if (response.ok) {
+        const data = (await response.json()) as Array<{ result?: string | null }>;
+        return data?.[0]?.result === "OK";
+      }
+    } catch {
+      return false;
+    }
+  }
+  const now = Date.now();
+  const expiresAt = devMemoryViewCache.get(key);
+  if (expiresAt && expiresAt > now) return false;
+  devMemoryViewCache.set(key, now + VIEW_DEDUP_WINDOW_SECONDS * 1000);
+  if (devMemoryViewCache.size > 5000) {
+    const firstKey = devMemoryViewCache.keys().next().value;
+    if (firstKey) devMemoryViewCache.delete(firstKey);
+  }
+  return true;
+}
 
 const PUBLIC_LISTING_SELECT = {
   id: true,
@@ -12,7 +50,13 @@ const PUBLIC_LISTING_SELECT = {
   category: true,
   campus: true,
   location: true,
+  images: true,
+  condition: true,
+  listingType: true,
+  serviceDetails: true,
+  slug: true,
   status: true,
+  views: true,
   createdAt: true,
 } as const;
 
@@ -24,7 +68,19 @@ export async function createListing(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const { storeId, title, description, price, category, campus, location, images } = req.body || {};
+    const {
+      storeId,
+      title,
+      description,
+      price,
+      category,
+      campus,
+      location,
+      images,
+      condition,
+      listingType,
+      serviceDetails,
+    } = req.body || {};
     if (Array.isArray(images)) {
       for (const imgUrl of images) {
         if (
@@ -67,6 +123,14 @@ export async function createListing(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
+    const cleanSlugBase = title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60);
+    const slug = `${cleanSlugBase || "listing"}-${crypto.randomBytes(4).toString("hex")}`;
+
     const listing = await prisma.listing.create({
       data: {
         storeId: store.id,
@@ -77,6 +141,11 @@ export async function createListing(req: AuthenticatedRequest, res: Response): P
         category: typeof category === "string" ? category : null,
         campus: typeof campus === "string" ? campus : store.campus,
         location: typeof location === "string" ? location : store.operatingLocation,
+        images: Array.isArray(images) ? images.filter((u): u is string => typeof u === "string") : [],
+        condition: typeof condition === "string" ? condition : null,
+        listingType: listingType === "service" ? "service" : "product",
+        serviceDetails: serviceDetails && typeof serviceDetails === "object" ? serviceDetails : undefined,
+        slug,
       },
       select: PUBLIC_LISTING_SELECT,
     });
@@ -213,8 +282,12 @@ export async function listFeed(req: Request, res: Response): Promise<void> {
     let nextCursor: string | null = null;
     if (hasMore && items.length > 0) {
       const last = items[items.length - 1];
+      const createdAtIso =
+        last.createdAt instanceof Date
+          ? last.createdAt.toISOString()
+          : String(last.createdAt);
       nextCursor = Buffer.from(
-        JSON.stringify({ createdAt: last.createdAt.toISOString(), id: last.id }),
+        JSON.stringify({ createdAt: createdAtIso, id: last.id }),
         "utf8"
       ).toString("base64url");
     }
@@ -229,6 +302,88 @@ export async function listFeed(req: Request, res: Response): Promise<void> {
     });
   } catch (err) {
     console.error("Error listing feed:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function getListingById(req: Request, res: Response): Promise<void> {
+  try {
+    const id = String(req.params.id || "").trim();
+    if (!id) {
+      res.status(400).json({ success: false, message: "Listing ID is required" });
+      return;
+    }
+
+    const row = await prisma.listing.findFirst({
+      where: {
+        OR: [{ id }, { slug: id.toLowerCase() }],
+        status: "active",
+        store: { status: "active" },
+      },
+      select: PUBLIC_LISTING_SELECT,
+    });
+
+    if (!row) {
+      res.status(404).json({ success: false, message: "Listing not found" });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: toPublicListing(row),
+    });
+  } catch (err) {
+    console.error("Error fetching listing detail:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function trackListingView(req: Request, res: Response): Promise<void> {
+  try {
+    const id = String(req.params.id || "").trim();
+    if (!id) {
+      res.status(400).json({ success: false, message: "Listing ID is required" });
+      return;
+    }
+
+    const listing = await prisma.listing.findUnique({
+      where: { id },
+      select: { id: true, status: true, views: true },
+    });
+
+    if (!listing || listing.status !== "active") {
+      res.status(404).json({ success: false, message: "Listing not found" });
+      return;
+    }
+
+    const viewerId = (req as AuthenticatedRequest).auth?.userId;
+    const rawIp =
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+      req.ip ||
+      "unknown";
+    const ua = String(req.headers["user-agent"] || "");
+    const fingerprint = viewerId
+      ? `u:${viewerId}`
+      : `a:${crypto.createHash("sha256").update(`${rawIp}|${ua}`).digest("hex").slice(0, 24)}`;
+
+    const shouldIncrement = await acquireViewDedupLock(`listing:view:${listing.id}:${fingerprint}`);
+    let updatedViews = listing.views;
+    if (shouldIncrement) {
+      const updated = await prisma.listing.update({
+        where: { id: listing.id },
+        data: { views: { increment: 1 } },
+        select: { views: true },
+      });
+      updatedViews = updated.views;
+    }
+
+    res.status(200).json({
+      success: true,
+      views: updatedViews,
+      counted: shouldIncrement,
+    });
+  } catch (err) {
+    console.error("Error tracking listing view:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 }

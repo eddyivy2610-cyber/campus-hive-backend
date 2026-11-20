@@ -79,6 +79,8 @@ model User {
   conversationsA Conversation[] @relation("ConversationParticipantA")
   conversationsB Conversation[] @relation("ConversationParticipantB")
   messages       Message[]
+  notifications  Notification[]
+  preferences    UserPreference?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -191,6 +193,12 @@ model Store {
   category          String?
   campus            String?
   operatingLocation String?
+  logo              String?
+  coverImage        String?
+  storeType         String   @default("student_store")
+  isVerified        Boolean  @default(false)
+  verificationType  String?
+  vacationMode      Boolean  @default(false)
   status            String   @default("active")
   suspensionReason  String?
   followersCount    Int      @default(0)
@@ -214,10 +222,16 @@ model Listing {
   description String?
   price       Float
   category    String?
-  campus      String?
-  location    String?
-  status      String   @default("active")
+  campus         String?
+  location       String?
+  images         String[] @default([])
+  condition      String?
+  listingType    String   @default("product")
+  serviceDetails Json?
+  slug           String?  @unique
+  status         String   @default("active")
   pausedBy    String?
+  views       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -275,6 +289,8 @@ model Conversation {
   id           String    @id @default(cuid())
   participantA String
   participantB String
+  storeId      String?
+  context      Json?
   userA        User      @relation("ConversationParticipantA", fields: [participantA], references: [id], onDelete: Cascade)
   userB        User      @relation("ConversationParticipantB", fields: [participantB], references: [id], onDelete: Cascade)
   messages     Message[]
@@ -296,4 +312,51 @@ model Message {
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+model UserPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme              String   @default("system")
+  homeFeedPreference String   @default("popular")
+  emailNotifications Boolean  @default(true)
+  pushNotifications  Boolean  @default(true)
+  updatedAt          DateTime @updatedAt
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String    @default("general")
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+}
+
+model Banner {
+  id             String    @id @default(cuid())
+  placement      String    @default("homepage_hero")
+  headline       String
+  description    String?
+  ctaLabel       String?
+  ctaUrl         String?
+  imageUrl       String
+  mobileImageUrl String?
+  imageAlt       String?
+  targetCategory String?
+  status         String    @default("published")
+  priority       Int       @default(0)
+  startAt        DateTime?
+  endAt          DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([placement, status, priority(sort: Desc)])
 }

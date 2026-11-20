@@ -28,10 +28,12 @@ export type AggregateListing = {
 
 export type ListingAvgAggregateOutputType = {
   price: number | null
+  views: number | null
 }
 
 export type ListingSumAggregateOutputType = {
   price: number | null
+  views: number | null
 }
 
 export type ListingMinAggregateOutputType = {
@@ -44,8 +46,12 @@ export type ListingMinAggregateOutputType = {
   category: string | null
   campus: string | null
   location: string | null
+  condition: string | null
+  listingType: string | null
+  slug: string | null
   status: string | null
   pausedBy: string | null
+  views: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -60,8 +66,12 @@ export type ListingMaxAggregateOutputType = {
   category: string | null
   campus: string | null
   location: string | null
+  condition: string | null
+  listingType: string | null
+  slug: string | null
   status: string | null
   pausedBy: string | null
+  views: number | null
   createdAt: Date | null
   updatedAt: Date | null
 }
@@ -76,8 +86,14 @@ export type ListingCountAggregateOutputType = {
   category: number
   campus: number
   location: number
+  images: number
+  condition: number
+  listingType: number
+  serviceDetails: number
+  slug: number
   status: number
   pausedBy: number
+  views: number
   createdAt: number
   updatedAt: number
   _all: number
@@ -86,10 +102,12 @@ export type ListingCountAggregateOutputType = {
 
 export type ListingAvgAggregateInputType = {
   price?: true
+  views?: true
 }
 
 export type ListingSumAggregateInputType = {
   price?: true
+  views?: true
 }
 
 export type ListingMinAggregateInputType = {
@@ -102,8 +120,12 @@ export type ListingMinAggregateInputType = {
   category?: true
   campus?: true
   location?: true
+  condition?: true
+  listingType?: true
+  slug?: true
   status?: true
   pausedBy?: true
+  views?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -118,8 +140,12 @@ export type ListingMaxAggregateInputType = {
   category?: true
   campus?: true
   location?: true
+  condition?: true
+  listingType?: true
+  slug?: true
   status?: true
   pausedBy?: true
+  views?: true
   createdAt?: true
   updatedAt?: true
 }
@@ -134,8 +160,14 @@ export type ListingCountAggregateInputType = {
   category?: true
   campus?: true
   location?: true
+  images?: true
+  condition?: true
+  listingType?: true
+  serviceDetails?: true
+  slug?: true
   status?: true
   pausedBy?: true
+  views?: true
   createdAt?: true
   updatedAt?: true
   _all?: true
@@ -237,8 +269,14 @@ export type ListingGroupByOutputType = {
   category: string | null
   campus: string | null
   location: string | null
+  images: string[]
+  condition: string | null
+  listingType: string
+  serviceDetails: runtime.JsonValue | null
+  slug: string | null
   status: string
   pausedBy: string | null
+  views: number
   createdAt: Date
   updatedAt: Date
   _count: ListingCountAggregateOutputType | null
@@ -276,8 +314,14 @@ export type ListingWhereInput = {
   category?: Prisma.StringNullableFilter<"Listing"> | string | null
   campus?: Prisma.StringNullableFilter<"Listing"> | string | null
   location?: Prisma.StringNullableFilter<"Listing"> | string | null
+  images?: Prisma.StringNullableListFilter<"Listing">
+  condition?: Prisma.StringNullableFilter<"Listing"> | string | null
+  listingType?: Prisma.StringFilter<"Listing"> | string
+  serviceDetails?: Prisma.JsonNullableFilter<"Listing">
+  slug?: Prisma.StringNullableFilter<"Listing"> | string | null
   status?: Prisma.StringFilter<"Listing"> | string
   pausedBy?: Prisma.StringNullableFilter<"Listing"> | string | null
+  views?: Prisma.IntFilter<"Listing"> | number
   createdAt?: Prisma.DateTimeFilter<"Listing"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Listing"> | Date | string
   store?: Prisma.XOR<Prisma.StoreScalarRelationFilter, Prisma.StoreWhereInput>
@@ -294,8 +338,14 @@ export type ListingOrderByWithRelationInput = {
   category?: Prisma.SortOrderInput | Prisma.SortOrder
   campus?: Prisma.SortOrderInput | Prisma.SortOrder
   location?: Prisma.SortOrderInput | Prisma.SortOrder
+  images?: Prisma.SortOrder
+  condition?: Prisma.SortOrderInput | Prisma.SortOrder
+  listingType?: Prisma.SortOrder
+  serviceDetails?: Prisma.SortOrderInput | Prisma.SortOrder
+  slug?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   pausedBy?: Prisma.SortOrderInput | Prisma.SortOrder
+  views?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   store?: Prisma.StoreOrderByWithRelationInput
@@ -304,6 +354,7 @@ export type ListingOrderByWithRelationInput = {
 
 export type ListingWhereUniqueInput = Prisma.AtLeast<{
   id?: string
+  slug?: string
   AND?: Prisma.ListingWhereInput | Prisma.ListingWhereInput[]
   OR?: Prisma.ListingWhereInput[]
   NOT?: Prisma.ListingWhereInput | Prisma.ListingWhereInput[]
@@ -315,13 +366,18 @@ export type ListingWhereUniqueInput = Prisma.AtLeast<{
   category?: Prisma.StringNullableFilter<"Listing"> | string | null
   campus?: Prisma.StringNullableFilter<"Listing"> | string | null
   location?: Prisma.StringNullableFilter<"Listing"> | string | null
+  images?: Prisma.StringNullableListFilter<"Listing">
+  condition?: Prisma.StringNullableFilter<"Listing"> | string | null
+  listingType?: Prisma.StringFilter<"Listing"> | string
+  serviceDetails?: Prisma.JsonNullableFilter<"Listing">
   status?: Prisma.StringFilter<"Listing"> | string
   pausedBy?: Prisma.StringNullableFilter<"Listing"> | string | null
+  views?: Prisma.IntFilter<"Listing"> | number
   createdAt?: Prisma.DateTimeFilter<"Listing"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Listing"> | Date | string
   store?: Prisma.XOR<Prisma.StoreScalarRelationFilter, Prisma.StoreWhereInput>
   seller?: Prisma.XOR<Prisma.UserScalarRelationFilter, Prisma.UserWhereInput>
-}, "id">
+}, "id" | "slug">
 
 export type ListingOrderByWithAggregationInput = {
   id?: Prisma.SortOrder
@@ -333,8 +389,14 @@ export type ListingOrderByWithAggregationInput = {
   category?: Prisma.SortOrderInput | Prisma.SortOrder
   campus?: Prisma.SortOrderInput | Prisma.SortOrder
   location?: Prisma.SortOrderInput | Prisma.SortOrder
+  images?: Prisma.SortOrder
+  condition?: Prisma.SortOrderInput | Prisma.SortOrder
+  listingType?: Prisma.SortOrder
+  serviceDetails?: Prisma.SortOrderInput | Prisma.SortOrder
+  slug?: Prisma.SortOrderInput | Prisma.SortOrder
   status?: Prisma.SortOrder
   pausedBy?: Prisma.SortOrderInput | Prisma.SortOrder
+  views?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   _count?: Prisma.ListingCountOrderByAggregateInput
@@ -357,8 +419,14 @@ export type ListingScalarWhereWithAggregatesInput = {
   category?: Prisma.StringNullableWithAggregatesFilter<"Listing"> | string | null
   campus?: Prisma.StringNullableWithAggregatesFilter<"Listing"> | string | null
   location?: Prisma.StringNullableWithAggregatesFilter<"Listing"> | string | null
+  images?: Prisma.StringNullableListFilter<"Listing">
+  condition?: Prisma.StringNullableWithAggregatesFilter<"Listing"> | string | null
+  listingType?: Prisma.StringWithAggregatesFilter<"Listing"> | string
+  serviceDetails?: Prisma.JsonNullableWithAggregatesFilter<"Listing">
+  slug?: Prisma.StringNullableWithAggregatesFilter<"Listing"> | string | null
   status?: Prisma.StringWithAggregatesFilter<"Listing"> | string
   pausedBy?: Prisma.StringNullableWithAggregatesFilter<"Listing"> | string | null
+  views?: Prisma.IntWithAggregatesFilter<"Listing"> | number
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Listing"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"Listing"> | Date | string
 }
@@ -371,8 +439,14 @@ export type ListingCreateInput = {
   category?: string | null
   campus?: string | null
   location?: string | null
+  images?: Prisma.ListingCreateimagesInput | string[]
+  condition?: string | null
+  listingType?: string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: string | null
   status?: string
   pausedBy?: string | null
+  views?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   store: Prisma.StoreCreateNestedOneWithoutListingsInput
@@ -389,8 +463,14 @@ export type ListingUncheckedCreateInput = {
   category?: string | null
   campus?: string | null
   location?: string | null
+  images?: Prisma.ListingCreateimagesInput | string[]
+  condition?: string | null
+  listingType?: string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: string | null
   status?: string
   pausedBy?: string | null
+  views?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -403,8 +483,14 @@ export type ListingUpdateInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   location?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  images?: Prisma.ListingUpdateimagesInput | string[]
+  condition?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  listingType?: Prisma.StringFieldUpdateOperationsInput | string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.StringFieldUpdateOperationsInput | string
   pausedBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  views?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   store?: Prisma.StoreUpdateOneRequiredWithoutListingsNestedInput
@@ -421,8 +507,14 @@ export type ListingUncheckedUpdateInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   location?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  images?: Prisma.ListingUpdateimagesInput | string[]
+  condition?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  listingType?: Prisma.StringFieldUpdateOperationsInput | string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.StringFieldUpdateOperationsInput | string
   pausedBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  views?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -437,8 +529,14 @@ export type ListingCreateManyInput = {
   category?: string | null
   campus?: string | null
   location?: string | null
+  images?: Prisma.ListingCreateimagesInput | string[]
+  condition?: string | null
+  listingType?: string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: string | null
   status?: string
   pausedBy?: string | null
+  views?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -451,8 +549,14 @@ export type ListingUpdateManyMutationInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   location?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  images?: Prisma.ListingUpdateimagesInput | string[]
+  condition?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  listingType?: Prisma.StringFieldUpdateOperationsInput | string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.StringFieldUpdateOperationsInput | string
   pausedBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  views?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -467,8 +571,14 @@ export type ListingUncheckedUpdateManyInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   location?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  images?: Prisma.ListingUpdateimagesInput | string[]
+  condition?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  listingType?: Prisma.StringFieldUpdateOperationsInput | string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.StringFieldUpdateOperationsInput | string
   pausedBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  views?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -483,6 +593,14 @@ export type ListingOrderByRelationAggregateInput = {
   _count?: Prisma.SortOrder
 }
 
+export type StringNullableListFilter<$PrismaModel = never> = {
+  equals?: string[] | Prisma.ListStringFieldRefInput<$PrismaModel> | null
+  has?: string | Prisma.StringFieldRefInput<$PrismaModel> | null
+  hasEvery?: string[] | Prisma.ListStringFieldRefInput<$PrismaModel>
+  hasSome?: string[] | Prisma.ListStringFieldRefInput<$PrismaModel>
+  isEmpty?: boolean
+}
+
 export type ListingCountOrderByAggregateInput = {
   id?: Prisma.SortOrder
   storeId?: Prisma.SortOrder
@@ -493,14 +611,21 @@ export type ListingCountOrderByAggregateInput = {
   category?: Prisma.SortOrder
   campus?: Prisma.SortOrder
   location?: Prisma.SortOrder
+  images?: Prisma.SortOrder
+  condition?: Prisma.SortOrder
+  listingType?: Prisma.SortOrder
+  serviceDetails?: Prisma.SortOrder
+  slug?: Prisma.SortOrder
   status?: Prisma.SortOrder
   pausedBy?: Prisma.SortOrder
+  views?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
 
 export type ListingAvgOrderByAggregateInput = {
   price?: Prisma.SortOrder
+  views?: Prisma.SortOrder
 }
 
 export type ListingMaxOrderByAggregateInput = {
@@ -513,8 +638,12 @@ export type ListingMaxOrderByAggregateInput = {
   category?: Prisma.SortOrder
   campus?: Prisma.SortOrder
   location?: Prisma.SortOrder
+  condition?: Prisma.SortOrder
+  listingType?: Prisma.SortOrder
+  slug?: Prisma.SortOrder
   status?: Prisma.SortOrder
   pausedBy?: Prisma.SortOrder
+  views?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
@@ -529,14 +658,19 @@ export type ListingMinOrderByAggregateInput = {
   category?: Prisma.SortOrder
   campus?: Prisma.SortOrder
   location?: Prisma.SortOrder
+  condition?: Prisma.SortOrder
+  listingType?: Prisma.SortOrder
+  slug?: Prisma.SortOrder
   status?: Prisma.SortOrder
   pausedBy?: Prisma.SortOrder
+  views?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
 }
 
 export type ListingSumOrderByAggregateInput = {
   price?: Prisma.SortOrder
+  views?: Prisma.SortOrder
 }
 
 export type ListingCreateNestedManyWithoutSellerInput = {
@@ -623,12 +757,21 @@ export type ListingUncheckedUpdateManyWithoutStoreNestedInput = {
   deleteMany?: Prisma.ListingScalarWhereInput | Prisma.ListingScalarWhereInput[]
 }
 
+export type ListingCreateimagesInput = {
+  set: string[]
+}
+
 export type FloatFieldUpdateOperationsInput = {
   set?: number
   increment?: number
   decrement?: number
   multiply?: number
   divide?: number
+}
+
+export type ListingUpdateimagesInput = {
+  set?: string[]
+  push?: string | string[]
 }
 
 export type ListingCreateWithoutSellerInput = {
@@ -639,8 +782,14 @@ export type ListingCreateWithoutSellerInput = {
   category?: string | null
   campus?: string | null
   location?: string | null
+  images?: Prisma.ListingCreateimagesInput | string[]
+  condition?: string | null
+  listingType?: string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: string | null
   status?: string
   pausedBy?: string | null
+  views?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   store: Prisma.StoreCreateNestedOneWithoutListingsInput
@@ -655,8 +804,14 @@ export type ListingUncheckedCreateWithoutSellerInput = {
   category?: string | null
   campus?: string | null
   location?: string | null
+  images?: Prisma.ListingCreateimagesInput | string[]
+  condition?: string | null
+  listingType?: string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: string | null
   status?: string
   pausedBy?: string | null
+  views?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -700,8 +855,14 @@ export type ListingScalarWhereInput = {
   category?: Prisma.StringNullableFilter<"Listing"> | string | null
   campus?: Prisma.StringNullableFilter<"Listing"> | string | null
   location?: Prisma.StringNullableFilter<"Listing"> | string | null
+  images?: Prisma.StringNullableListFilter<"Listing">
+  condition?: Prisma.StringNullableFilter<"Listing"> | string | null
+  listingType?: Prisma.StringFilter<"Listing"> | string
+  serviceDetails?: Prisma.JsonNullableFilter<"Listing">
+  slug?: Prisma.StringNullableFilter<"Listing"> | string | null
   status?: Prisma.StringFilter<"Listing"> | string
   pausedBy?: Prisma.StringNullableFilter<"Listing"> | string | null
+  views?: Prisma.IntFilter<"Listing"> | number
   createdAt?: Prisma.DateTimeFilter<"Listing"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Listing"> | Date | string
 }
@@ -714,8 +875,14 @@ export type ListingCreateWithoutStoreInput = {
   category?: string | null
   campus?: string | null
   location?: string | null
+  images?: Prisma.ListingCreateimagesInput | string[]
+  condition?: string | null
+  listingType?: string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: string | null
   status?: string
   pausedBy?: string | null
+  views?: number
   createdAt?: Date | string
   updatedAt?: Date | string
   seller: Prisma.UserCreateNestedOneWithoutListingsInput
@@ -730,8 +897,14 @@ export type ListingUncheckedCreateWithoutStoreInput = {
   category?: string | null
   campus?: string | null
   location?: string | null
+  images?: Prisma.ListingCreateimagesInput | string[]
+  condition?: string | null
+  listingType?: string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: string | null
   status?: string
   pausedBy?: string | null
+  views?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -771,8 +944,14 @@ export type ListingCreateManySellerInput = {
   category?: string | null
   campus?: string | null
   location?: string | null
+  images?: Prisma.ListingCreateimagesInput | string[]
+  condition?: string | null
+  listingType?: string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: string | null
   status?: string
   pausedBy?: string | null
+  views?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -785,8 +964,14 @@ export type ListingUpdateWithoutSellerInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   location?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  images?: Prisma.ListingUpdateimagesInput | string[]
+  condition?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  listingType?: Prisma.StringFieldUpdateOperationsInput | string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.StringFieldUpdateOperationsInput | string
   pausedBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  views?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   store?: Prisma.StoreUpdateOneRequiredWithoutListingsNestedInput
@@ -801,8 +986,14 @@ export type ListingUncheckedUpdateWithoutSellerInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   location?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  images?: Prisma.ListingUpdateimagesInput | string[]
+  condition?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  listingType?: Prisma.StringFieldUpdateOperationsInput | string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.StringFieldUpdateOperationsInput | string
   pausedBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  views?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -816,8 +1007,14 @@ export type ListingUncheckedUpdateManyWithoutSellerInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   location?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  images?: Prisma.ListingUpdateimagesInput | string[]
+  condition?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  listingType?: Prisma.StringFieldUpdateOperationsInput | string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.StringFieldUpdateOperationsInput | string
   pausedBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  views?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -831,8 +1028,14 @@ export type ListingCreateManyStoreInput = {
   category?: string | null
   campus?: string | null
   location?: string | null
+  images?: Prisma.ListingCreateimagesInput | string[]
+  condition?: string | null
+  listingType?: string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: string | null
   status?: string
   pausedBy?: string | null
+  views?: number
   createdAt?: Date | string
   updatedAt?: Date | string
 }
@@ -845,8 +1048,14 @@ export type ListingUpdateWithoutStoreInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   location?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  images?: Prisma.ListingUpdateimagesInput | string[]
+  condition?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  listingType?: Prisma.StringFieldUpdateOperationsInput | string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.StringFieldUpdateOperationsInput | string
   pausedBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  views?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   seller?: Prisma.UserUpdateOneRequiredWithoutListingsNestedInput
@@ -861,8 +1070,14 @@ export type ListingUncheckedUpdateWithoutStoreInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   location?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  images?: Prisma.ListingUpdateimagesInput | string[]
+  condition?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  listingType?: Prisma.StringFieldUpdateOperationsInput | string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.StringFieldUpdateOperationsInput | string
   pausedBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  views?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -876,8 +1091,14 @@ export type ListingUncheckedUpdateManyWithoutStoreInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   location?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  images?: Prisma.ListingUpdateimagesInput | string[]
+  condition?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  listingType?: Prisma.StringFieldUpdateOperationsInput | string
+  serviceDetails?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  slug?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   status?: Prisma.StringFieldUpdateOperationsInput | string
   pausedBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  views?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -894,8 +1115,14 @@ export type ListingSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs 
   category?: boolean
   campus?: boolean
   location?: boolean
+  images?: boolean
+  condition?: boolean
+  listingType?: boolean
+  serviceDetails?: boolean
+  slug?: boolean
   status?: boolean
   pausedBy?: boolean
+  views?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   store?: boolean | Prisma.StoreDefaultArgs<ExtArgs>
@@ -912,8 +1139,14 @@ export type ListingSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Exten
   category?: boolean
   campus?: boolean
   location?: boolean
+  images?: boolean
+  condition?: boolean
+  listingType?: boolean
+  serviceDetails?: boolean
+  slug?: boolean
   status?: boolean
   pausedBy?: boolean
+  views?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   store?: boolean | Prisma.StoreDefaultArgs<ExtArgs>
@@ -930,8 +1163,14 @@ export type ListingSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Exten
   category?: boolean
   campus?: boolean
   location?: boolean
+  images?: boolean
+  condition?: boolean
+  listingType?: boolean
+  serviceDetails?: boolean
+  slug?: boolean
   status?: boolean
   pausedBy?: boolean
+  views?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   store?: boolean | Prisma.StoreDefaultArgs<ExtArgs>
@@ -948,13 +1187,19 @@ export type ListingSelectScalar = {
   category?: boolean
   campus?: boolean
   location?: boolean
+  images?: boolean
+  condition?: boolean
+  listingType?: boolean
+  serviceDetails?: boolean
+  slug?: boolean
   status?: boolean
   pausedBy?: boolean
+  views?: boolean
   createdAt?: boolean
   updatedAt?: boolean
 }
 
-export type ListingOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "storeId" | "sellerId" | "title" | "description" | "price" | "category" | "campus" | "location" | "status" | "pausedBy" | "createdAt" | "updatedAt", ExtArgs["result"]["listing"]>
+export type ListingOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "storeId" | "sellerId" | "title" | "description" | "price" | "category" | "campus" | "location" | "images" | "condition" | "listingType" | "serviceDetails" | "slug" | "status" | "pausedBy" | "views" | "createdAt" | "updatedAt", ExtArgs["result"]["listing"]>
 export type ListingInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   store?: boolean | Prisma.StoreDefaultArgs<ExtArgs>
   seller?: boolean | Prisma.UserDefaultArgs<ExtArgs>
@@ -984,8 +1229,14 @@ export type $ListingPayload<ExtArgs extends runtime.Types.Extensions.InternalArg
     category: string | null
     campus: string | null
     location: string | null
+    images: string[]
+    condition: string | null
+    listingType: string
+    serviceDetails: runtime.JsonValue | null
+    slug: string | null
     status: string
     pausedBy: string | null
+    views: number
     createdAt: Date
     updatedAt: Date
   }, ExtArgs["result"]["listing"]>
@@ -1422,8 +1673,14 @@ export interface ListingFieldRefs {
   readonly category: Prisma.FieldRef<"Listing", 'String'>
   readonly campus: Prisma.FieldRef<"Listing", 'String'>
   readonly location: Prisma.FieldRef<"Listing", 'String'>
+  readonly images: Prisma.FieldRef<"Listing", 'String[]'>
+  readonly condition: Prisma.FieldRef<"Listing", 'String'>
+  readonly listingType: Prisma.FieldRef<"Listing", 'String'>
+  readonly serviceDetails: Prisma.FieldRef<"Listing", 'Json'>
+  readonly slug: Prisma.FieldRef<"Listing", 'String'>
   readonly status: Prisma.FieldRef<"Listing", 'String'>
   readonly pausedBy: Prisma.FieldRef<"Listing", 'String'>
+  readonly views: Prisma.FieldRef<"Listing", 'Int'>
   readonly createdAt: Prisma.FieldRef<"Listing", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"Listing", 'DateTime'>
 }

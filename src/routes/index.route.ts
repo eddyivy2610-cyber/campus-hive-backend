@@ -30,60 +30,19 @@ router.use("/dashboard", dashboardRoute);
 // Frontend (campushive) compatibility endpoints
 router.get("/users/profile", async (req, res, next) => {
   const rawHandle = typeof req.query.handle === "string" ? req.query.handle.trim().replace(/^@/, "").toLowerCase() : "";
-  if (!rawHandle) {
-    return authenticate(req as AuthenticatedRequest, res, () => getMe(req as AuthenticatedRequest, res));
-  }
-  try {
-    const user = await prisma.user.findUnique({
-      where: { username: rawHandle },
-      select: {
-        id: true,
-        username: true,
-        fullName: true,
-        displayName: true,
-        profileImage: true,
-        role: true,
-        createdAt: true,
-        stores: {
-          where: { status: "active" },
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            description: true,
-            category: true,
-            campus: true,
-            operatingLocation: true,
-            status: true,
-            followersCount: true,
-            createdAt: true,
-          },
-          orderBy: { createdAt: "desc" },
-        },
-      },
+  const rawQuery = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const rawUserId = typeof req.query.userId === "string" ? req.query.userId.trim() : "";
+
+  if (rawQuery || rawUserId || (rawHandle && rawHandle !== "me")) {
+    res.setHeader("Cache-Control", "private, no-store, must-revalidate");
+    res.status(404).json({
+      success: false,
+      message: "Public user profiles and handle lookups are disabled. User accounts are private.",
     });
-    if (!user) {
-      res.status(404).json({ success: false, message: "User not found" });
-      return;
-    }
-    const activeStores = (user.stores || []).map((s) => ({ ...s, _id: s.id }));
-    const formatted = {
-      ...user,
-      _id: user.id,
-      name: user.displayName || user.fullName || user.username,
-      profile: {
-        displayName: user.displayName || user.fullName || user.username,
-        handle: user.username,
-        avatar: user.profileImage || null,
-      },
-      stores: activeStores,
-      store: activeStores[0] || null,
-      storeId: activeStores[0]?.id || null,
-    };
-    res.status(200).json({ success: true, data: formatted, user: formatted });
-  } catch (err) {
-    next(err);
+    return;
   }
+
+  return authenticate(req as AuthenticatedRequest, res, () => getMe(req as AuthenticatedRequest, res));
 });
 router.patch("/users/profile", authenticate, async (req: AuthenticatedRequest, res) => {
   try {
@@ -149,21 +108,145 @@ router.get("/users/check-username", async (req, res) => {
   const existing = await prisma.user.findUnique({ where: { username }, select: { id: true } });
   res.status(200).json({ success: true, available: !existing });
 });
-router.get("/users/preferences", authenticate, (_req, res) => {
-  res.status(200).json({ success: true, data: { emailNotifications: true, pushNotifications: true } });
+router.get("/users/preferences", authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const prefs = await prisma.userPreference.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+    res.status(200).json({ success: true, data: prefs });
+  } catch (err) {
+    console.error("[GET /users/preferences] Error:", err);
+    res.status(500).json({ message: "Failed to load preferences" });
+  }
 });
-router.patch("/users/preferences", authenticate, (req, res) => {
-  res.status(200).json({ success: true, data: req.body || {} });
+router.patch("/users/preferences", authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const body = req.body || {};
+    const updateData: Record<string, any> = {};
+    if (body.theme === "light" || body.theme === "dark" || body.theme === "system") {
+      updateData.theme = body.theme;
+    }
+    if (
+      body.homeFeedPreference === "popular" ||
+      body.homeFeedPreference === "recent" ||
+      body.homeFeedPreference === "both"
+    ) {
+      updateData.homeFeedPreference = body.homeFeedPreference;
+    }
+    if (typeof body.emailNotifications === "boolean") {
+      updateData.emailNotifications = body.emailNotifications;
+    }
+    if (typeof body.pushNotifications === "boolean") {
+      updateData.pushNotifications = body.pushNotifications;
+    }
+    const prefs = await prisma.userPreference.upsert({
+      where: { userId },
+      update: updateData,
+      create: { userId, ...updateData },
+    });
+    res.status(200).json({ success: true, data: prefs });
+  } catch (err) {
+    console.error("[PATCH /users/preferences] Error:", err);
+    res.status(500).json({ message: "Failed to update preferences" });
+  }
 });
 router.get("/follows/stores", authenticate, listFollowing);
-router.get("/banners/active", (_req, res) => {
-  res.status(200).json({ success: true, data: [], banners: [] });
+router.get("/banners/active", async (req, res) => {
+  try {
+    const placement = typeof req.query.placement === "string" ? req.query.placement : "homepage_hero";
+    const now = new Date();
+    const banners = await prisma.banner.findMany({
+      where: {
+        placement,
+        status: "published",
+        AND: [
+          { OR: [{ startAt: null }, { startAt: { lte: now } }] },
+          { OR: [{ endAt: null }, { endAt: { gte: now } }] },
+        ],
+      },
+      orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
+      take: 10,
+    });
+    res.status(200).json({ success: true, data: banners, banners });
+  } catch (err) {
+    console.error("[GET /banners/active] Error:", err);
+    res.status(500).json({ message: "Failed to load active banners" });
+  }
 });
-router.get("/notifications", authenticate, (_req, res) => {
-  res.status(200).json({ success: true, data: [], unreadCount: 0 });
+router.get("/notifications", authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const [notifications, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
+      prisma.notification.count({
+        where: { userId, isRead: false },
+      }),
+    ]);
+    res.status(200).json({ success: true, data: notifications, unreadCount });
+  } catch (err) {
+    console.error("[GET /notifications] Error:", err);
+    res.status(500).json({ message: "Failed to load notifications" });
+  }
 });
-router.patch("/notifications/read-all", authenticate, (_req, res) => {
-  res.status(200).json({ success: true });
+router.patch("/notifications/read-all", authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    await prisma.notification.updateMany({
+      where: { userId, isRead: false },
+      data: { isRead: true, readAt: new Date() },
+    });
+    res.status(200).json({ success: true, unreadCount: 0 });
+  } catch (err) {
+    console.error("[PATCH /notifications/read-all] Error:", err);
+    res.status(500).json({ message: "Failed to mark notifications as read" });
+  }
+});
+router.patch("/notifications/:id", authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const id = String(req.params.id || "").trim();
+    const updated = await prisma.notification.updateMany({
+      where: { id, userId },
+      data: { isRead: true, readAt: new Date() },
+    });
+    if (updated.count === 0) {
+      res.status(404).json({ success: false, message: "Notification not found" });
+      return;
+    }
+    const unreadCount = await prisma.notification.count({ where: { userId, isRead: false } });
+    res.status(200).json({ success: true, unreadCount });
+  } catch (err) {
+    console.error("[PATCH /notifications/:id] Error:", err);
+    res.status(500).json({ message: "Failed to update notification" });
+  }
 });
 
 export default router;

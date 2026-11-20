@@ -10,13 +10,30 @@ export async function createConversation(req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    const participantId = String(req.body?.participantId || "").trim();
+    let participantId = String(req.body?.participantId || "").trim();
+    const storeIdInput = typeof req.body?.storeId === "string" ? req.body.storeId.trim() : "";
+    const contextInput = req.body?.context && typeof req.body.context === "object" ? req.body.context : undefined;
+
+    let resolvedStore: { id: string; ownerId: string; logo: string | null } | null = null;
+    if (storeIdInput) {
+      resolvedStore = await prisma.store.findFirst({
+        where: { OR: [{ id: storeIdInput }, { slugLower: storeIdInput.toLowerCase() }] },
+        select: { id: true, ownerId: true, logo: true },
+      });
+      if (resolvedStore?.ownerId) {
+        participantId = resolvedStore.ownerId;
+      }
+    }
+
     if (!participantId || participantId === userId) {
       res.status(400).json({ message: "Valid participantId is required", error: "bad_request" });
       return;
     }
 
-    const otherUser = await prisma.user.findUnique({ where: { id: participantId }, select: { id: true } });
+    const otherUser = await prisma.user.findUnique({
+      where: { id: participantId },
+      select: { id: true, fullName: true, displayName: true, username: true, profileImage: true },
+    });
     if (!otherUser) {
       res.status(404).json({ message: "Participant not found", error: "not_found" });
       return;
@@ -25,11 +42,29 @@ export async function createConversation(req: AuthenticatedRequest, res: Respons
     const [participantA, participantB] = [userId, participantId].sort();
     const conv = await prisma.conversation.upsert({
       where: { participantA_participantB: { participantA, participantB } },
-      update: {},
-      create: { participantA, participantB },
+      update: {
+        ...(resolvedStore?.id ? { storeId: resolvedStore.id } : {}),
+        ...(contextInput ? { context: contextInput } : {}),
+      },
+      create: {
+        participantA,
+        participantB,
+        ...(resolvedStore?.id ? { storeId: resolvedStore.id } : {}),
+        ...(contextInput ? { context: contextInput } : {}),
+      },
     });
 
-    res.status(201).json({ success: true, data: conv });
+    res.status(201).json({
+      success: true,
+      data: {
+        ...conv,
+        otherParticipant: {
+          id: otherUser.id,
+          name: otherUser.displayName || otherUser.fullName || otherUser.username,
+          avatar: otherUser.profileImage || resolvedStore?.logo || null,
+        },
+      },
+    });
   } catch (err) {
     console.error("Create conversation error:", err);
     res.status(500).json({ message: "Internal server error" });

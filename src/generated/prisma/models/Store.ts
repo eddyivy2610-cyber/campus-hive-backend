@@ -44,6 +44,12 @@ export type StoreMinAggregateOutputType = {
   category: string | null
   campus: string | null
   operatingLocation: string | null
+  logo: string | null
+  coverImage: string | null
+  storeType: string | null
+  isVerified: boolean | null
+  verificationType: string | null
+  vacationMode: boolean | null
   status: string | null
   suspensionReason: string | null
   followersCount: number | null
@@ -61,6 +67,12 @@ export type StoreMaxAggregateOutputType = {
   category: string | null
   campus: string | null
   operatingLocation: string | null
+  logo: string | null
+  coverImage: string | null
+  storeType: string | null
+  isVerified: boolean | null
+  verificationType: string | null
+  vacationMode: boolean | null
   status: string | null
   suspensionReason: string | null
   followersCount: number | null
@@ -78,6 +90,12 @@ export type StoreCountAggregateOutputType = {
   category: number
   campus: number
   operatingLocation: number
+  logo: number
+  coverImage: number
+  storeType: number
+  isVerified: number
+  verificationType: number
+  vacationMode: number
   status: number
   suspensionReason: number
   followersCount: number
@@ -105,6 +123,12 @@ export type StoreMinAggregateInputType = {
   category?: true
   campus?: true
   operatingLocation?: true
+  logo?: true
+  coverImage?: true
+  storeType?: true
+  isVerified?: true
+  verificationType?: true
+  vacationMode?: true
   status?: true
   suspensionReason?: true
   followersCount?: true
@@ -122,6 +146,12 @@ export type StoreMaxAggregateInputType = {
   category?: true
   campus?: true
   operatingLocation?: true
+  logo?: true
+  coverImage?: true
+  storeType?: true
+  isVerified?: true
+  verificationType?: true
+  vacationMode?: true
   status?: true
   suspensionReason?: true
   followersCount?: true
@@ -139,6 +169,12 @@ export type StoreCountAggregateInputType = {
   category?: true
   campus?: true
   operatingLocation?: true
+  logo?: true
+  coverImage?: true
+  storeType?: true
+  isVerified?: true
+  verificationType?: true
+  vacationMode?: true
   status?: true
   suspensionReason?: true
   followersCount?: true
@@ -243,6 +279,12 @@ export type StoreGroupByOutputType = {
   category: string | null
   campus: string | null
   operatingLocation: string | null
+  logo: string | null
+  coverImage: string | null
+  storeType: string
+  isVerified: boolean
+  verificationType: string | null
+  vacationMode: boolean
   status: string
   suspensionReason: string | null
   followersCount: number
@@ -283,6 +325,12 @@ export type StoreWhereInput = {
   category?: Prisma.StringNullableFilter<"Store"> | string | null
   campus?: Prisma.StringNullableFilter<"Store"> | string | null
   operatingLocation?: Prisma.StringNullableFilter<"Store"> | string | null
+  logo?: Prisma.StringNullableFilter<"Store"> | string | null
+  coverImage?: Prisma.StringNullableFilter<"Store"> | string | null
+  storeType?: Prisma.StringFilter<"Store"> | string
+  isVerified?: Prisma.BoolFilter<"Store"> | boolean
+  verificationType?: Prisma.StringNullableFilter<"Store"> | string | null
+  vacationMode?: Prisma.BoolFilter<"Store"> | boolean
   status?: Prisma.StringFilter<"Store"> | string
   suspensionReason?: Prisma.StringNullableFilter<"Store"> | string | null
   followersCount?: Prisma.IntFilter<"Store"> | number
@@ -303,6 +351,12 @@ export type StoreOrderByWithRelationInput = {
   category?: Prisma.SortOrderInput | Prisma.SortOrder
   campus?: Prisma.SortOrderInput | Prisma.SortOrder
   operatingLocation?: Prisma.SortOrderInput | Prisma.SortOrder
+  logo?: Prisma.SortOrderInput | Prisma.SortOrder
+  coverImage?: Prisma.SortOrderInput | Prisma.SortOrder
+  storeType?: Prisma.SortOrder
+  isVerified?: Prisma.SortOrder
+  verificationType?: Prisma.SortOrderInput | Prisma.SortOrder
+  vacationMode?: Prisma.SortOrder
   status?: Prisma.SortOrder
   suspensionReason?: Prisma.SortOrderInput | Prisma.SortOrder
   followersCount?: Prisma.SortOrder
@@ -326,6 +380,12 @@ export type StoreWhereUniqueInput = Prisma.AtLeast<{
   category?: Prisma.StringNullableFilter<"Store"> | string | null
   campus?: Prisma.StringNullableFilter<"Store"> | string | null
   operatingLocation?: Prisma.StringNullableFilter<"Store"> | string | null
+  logo?: Prisma.StringNullableFilter<"Store"> | string | null
+  coverImage?: Prisma.StringNullableFilter<"Store"> | string | null
+  storeType?: Prisma.StringFilter<"Store"> | string
+  isVerified?: Prisma.BoolFilter<"Store"> | boolean
+  verificationType?: Prisma.StringNullableFilter<"Store"> | string | null
+  vacationMode?: Prisma.BoolFilter<"Store"> | boolean
   status?: Prisma.StringFilter<"Store"> | string
   suspensionReason?: Prisma.StringNullableFilter<"Store"> | string | null
   followersCount?: Prisma.IntFilter<"Store"> | number
@@ -346,6 +406,12 @@ export type StoreOrderByWithAggregationInput = {
   category?: Prisma.SortOrderInput | Prisma.SortOrder
   campus?: Prisma.SortOrderInput | Prisma.SortOrder
   operatingLocation?: Prisma.SortOrderInput | Prisma.SortOrder
+  logo?: Prisma.SortOrderInput | Prisma.SortOrder
+  coverImage?: Prisma.SortOrderInput | Prisma.SortOrder
+  storeType?: Prisma.SortOrder
+  isVerified?: Prisma.SortOrder
+  verificationType?: Prisma.SortOrderInput | Prisma.SortOrder
+  vacationMode?: Prisma.SortOrder
   status?: Prisma.SortOrder
   suspensionReason?: Prisma.SortOrderInput | Prisma.SortOrder
   followersCount?: Prisma.SortOrder
@@ -371,6 +437,12 @@ export type StoreScalarWhereWithAggregatesInput = {
   category?: Prisma.StringNullableWithAggregatesFilter<"Store"> | string | null
   campus?: Prisma.StringNullableWithAggregatesFilter<"Store"> | string | null
   operatingLocation?: Prisma.StringNullableWithAggregatesFilter<"Store"> | string | null
+  logo?: Prisma.StringNullableWithAggregatesFilter<"Store"> | string | null
+  coverImage?: Prisma.StringNullableWithAggregatesFilter<"Store"> | string | null
+  storeType?: Prisma.StringWithAggregatesFilter<"Store"> | string
+  isVerified?: Prisma.BoolWithAggregatesFilter<"Store"> | boolean
+  verificationType?: Prisma.StringNullableWithAggregatesFilter<"Store"> | string | null
+  vacationMode?: Prisma.BoolWithAggregatesFilter<"Store"> | boolean
   status?: Prisma.StringWithAggregatesFilter<"Store"> | string
   suspensionReason?: Prisma.StringNullableWithAggregatesFilter<"Store"> | string | null
   followersCount?: Prisma.IntWithAggregatesFilter<"Store"> | number
@@ -387,6 +459,12 @@ export type StoreCreateInput = {
   category?: string | null
   campus?: string | null
   operatingLocation?: string | null
+  logo?: string | null
+  coverImage?: string | null
+  storeType?: string
+  isVerified?: boolean
+  verificationType?: string | null
+  vacationMode?: boolean
   status?: string
   suspensionReason?: string | null
   followersCount?: number
@@ -407,6 +485,12 @@ export type StoreUncheckedCreateInput = {
   category?: string | null
   campus?: string | null
   operatingLocation?: string | null
+  logo?: string | null
+  coverImage?: string | null
+  storeType?: string
+  isVerified?: boolean
+  verificationType?: string | null
+  vacationMode?: boolean
   status?: string
   suspensionReason?: string | null
   followersCount?: number
@@ -425,6 +509,12 @@ export type StoreUpdateInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -445,6 +535,12 @@ export type StoreUncheckedUpdateInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -464,6 +560,12 @@ export type StoreCreateManyInput = {
   category?: string | null
   campus?: string | null
   operatingLocation?: string | null
+  logo?: string | null
+  coverImage?: string | null
+  storeType?: string
+  isVerified?: boolean
+  verificationType?: string | null
+  vacationMode?: boolean
   status?: string
   suspensionReason?: string | null
   followersCount?: number
@@ -480,6 +582,12 @@ export type StoreUpdateManyMutationInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -497,6 +605,12 @@ export type StoreUncheckedUpdateManyInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -524,6 +638,12 @@ export type StoreCountOrderByAggregateInput = {
   category?: Prisma.SortOrder
   campus?: Prisma.SortOrder
   operatingLocation?: Prisma.SortOrder
+  logo?: Prisma.SortOrder
+  coverImage?: Prisma.SortOrder
+  storeType?: Prisma.SortOrder
+  isVerified?: Prisma.SortOrder
+  verificationType?: Prisma.SortOrder
+  vacationMode?: Prisma.SortOrder
   status?: Prisma.SortOrder
   suspensionReason?: Prisma.SortOrder
   followersCount?: Prisma.SortOrder
@@ -545,6 +665,12 @@ export type StoreMaxOrderByAggregateInput = {
   category?: Prisma.SortOrder
   campus?: Prisma.SortOrder
   operatingLocation?: Prisma.SortOrder
+  logo?: Prisma.SortOrder
+  coverImage?: Prisma.SortOrder
+  storeType?: Prisma.SortOrder
+  isVerified?: Prisma.SortOrder
+  verificationType?: Prisma.SortOrder
+  vacationMode?: Prisma.SortOrder
   status?: Prisma.SortOrder
   suspensionReason?: Prisma.SortOrder
   followersCount?: Prisma.SortOrder
@@ -562,6 +688,12 @@ export type StoreMinOrderByAggregateInput = {
   category?: Prisma.SortOrder
   campus?: Prisma.SortOrder
   operatingLocation?: Prisma.SortOrder
+  logo?: Prisma.SortOrder
+  coverImage?: Prisma.SortOrder
+  storeType?: Prisma.SortOrder
+  isVerified?: Prisma.SortOrder
+  verificationType?: Prisma.SortOrder
+  vacationMode?: Prisma.SortOrder
   status?: Prisma.SortOrder
   suspensionReason?: Prisma.SortOrder
   followersCount?: Prisma.SortOrder
@@ -657,6 +789,12 @@ export type StoreCreateWithoutOwnerInput = {
   category?: string | null
   campus?: string | null
   operatingLocation?: string | null
+  logo?: string | null
+  coverImage?: string | null
+  storeType?: string
+  isVerified?: boolean
+  verificationType?: string | null
+  vacationMode?: boolean
   status?: string
   suspensionReason?: string | null
   followersCount?: number
@@ -675,6 +813,12 @@ export type StoreUncheckedCreateWithoutOwnerInput = {
   category?: string | null
   campus?: string | null
   operatingLocation?: string | null
+  logo?: string | null
+  coverImage?: string | null
+  storeType?: string
+  isVerified?: boolean
+  verificationType?: string | null
+  vacationMode?: boolean
   status?: string
   suspensionReason?: string | null
   followersCount?: number
@@ -723,6 +867,12 @@ export type StoreScalarWhereInput = {
   category?: Prisma.StringNullableFilter<"Store"> | string | null
   campus?: Prisma.StringNullableFilter<"Store"> | string | null
   operatingLocation?: Prisma.StringNullableFilter<"Store"> | string | null
+  logo?: Prisma.StringNullableFilter<"Store"> | string | null
+  coverImage?: Prisma.StringNullableFilter<"Store"> | string | null
+  storeType?: Prisma.StringFilter<"Store"> | string
+  isVerified?: Prisma.BoolFilter<"Store"> | boolean
+  verificationType?: Prisma.StringNullableFilter<"Store"> | string | null
+  vacationMode?: Prisma.BoolFilter<"Store"> | boolean
   status?: Prisma.StringFilter<"Store"> | string
   suspensionReason?: Prisma.StringNullableFilter<"Store"> | string | null
   followersCount?: Prisma.IntFilter<"Store"> | number
@@ -739,6 +889,12 @@ export type StoreCreateWithoutListingsInput = {
   category?: string | null
   campus?: string | null
   operatingLocation?: string | null
+  logo?: string | null
+  coverImage?: string | null
+  storeType?: string
+  isVerified?: boolean
+  verificationType?: string | null
+  vacationMode?: boolean
   status?: string
   suspensionReason?: string | null
   followersCount?: number
@@ -758,6 +914,12 @@ export type StoreUncheckedCreateWithoutListingsInput = {
   category?: string | null
   campus?: string | null
   operatingLocation?: string | null
+  logo?: string | null
+  coverImage?: string | null
+  storeType?: string
+  isVerified?: boolean
+  verificationType?: string | null
+  vacationMode?: boolean
   status?: string
   suspensionReason?: string | null
   followersCount?: number
@@ -791,6 +953,12 @@ export type StoreUpdateWithoutListingsInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -810,6 +978,12 @@ export type StoreUncheckedUpdateWithoutListingsInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -827,6 +1001,12 @@ export type StoreCreateWithoutFollowsInput = {
   category?: string | null
   campus?: string | null
   operatingLocation?: string | null
+  logo?: string | null
+  coverImage?: string | null
+  storeType?: string
+  isVerified?: boolean
+  verificationType?: string | null
+  vacationMode?: boolean
   status?: string
   suspensionReason?: string | null
   followersCount?: number
@@ -846,6 +1026,12 @@ export type StoreUncheckedCreateWithoutFollowsInput = {
   category?: string | null
   campus?: string | null
   operatingLocation?: string | null
+  logo?: string | null
+  coverImage?: string | null
+  storeType?: string
+  isVerified?: boolean
+  verificationType?: string | null
+  vacationMode?: boolean
   status?: string
   suspensionReason?: string | null
   followersCount?: number
@@ -879,6 +1065,12 @@ export type StoreUpdateWithoutFollowsInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -898,6 +1090,12 @@ export type StoreUncheckedUpdateWithoutFollowsInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -915,6 +1113,12 @@ export type StoreCreateManyOwnerInput = {
   category?: string | null
   campus?: string | null
   operatingLocation?: string | null
+  logo?: string | null
+  coverImage?: string | null
+  storeType?: string
+  isVerified?: boolean
+  verificationType?: string | null
+  vacationMode?: boolean
   status?: string
   suspensionReason?: string | null
   followersCount?: number
@@ -931,6 +1135,12 @@ export type StoreUpdateWithoutOwnerInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -949,6 +1159,12 @@ export type StoreUncheckedUpdateWithoutOwnerInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -967,6 +1183,12 @@ export type StoreUncheckedUpdateManyWithoutOwnerInput = {
   category?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   campus?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   operatingLocation?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  logo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  coverImage?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  storeType?: Prisma.StringFieldUpdateOperationsInput | string
+  isVerified?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  verificationType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  vacationMode?: Prisma.BoolFieldUpdateOperationsInput | boolean
   status?: Prisma.StringFieldUpdateOperationsInput | string
   suspensionReason?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   followersCount?: Prisma.IntFieldUpdateOperationsInput | number
@@ -1024,6 +1246,12 @@ export type StoreSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   category?: boolean
   campus?: boolean
   operatingLocation?: boolean
+  logo?: boolean
+  coverImage?: boolean
+  storeType?: boolean
+  isVerified?: boolean
+  verificationType?: boolean
+  vacationMode?: boolean
   status?: boolean
   suspensionReason?: boolean
   followersCount?: boolean
@@ -1045,6 +1273,12 @@ export type StoreSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   category?: boolean
   campus?: boolean
   operatingLocation?: boolean
+  logo?: boolean
+  coverImage?: boolean
+  storeType?: boolean
+  isVerified?: boolean
+  verificationType?: boolean
+  vacationMode?: boolean
   status?: boolean
   suspensionReason?: boolean
   followersCount?: boolean
@@ -1063,6 +1297,12 @@ export type StoreSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
   category?: boolean
   campus?: boolean
   operatingLocation?: boolean
+  logo?: boolean
+  coverImage?: boolean
+  storeType?: boolean
+  isVerified?: boolean
+  verificationType?: boolean
+  vacationMode?: boolean
   status?: boolean
   suspensionReason?: boolean
   followersCount?: boolean
@@ -1081,6 +1321,12 @@ export type StoreSelectScalar = {
   category?: boolean
   campus?: boolean
   operatingLocation?: boolean
+  logo?: boolean
+  coverImage?: boolean
+  storeType?: boolean
+  isVerified?: boolean
+  verificationType?: boolean
+  vacationMode?: boolean
   status?: boolean
   suspensionReason?: boolean
   followersCount?: boolean
@@ -1088,7 +1334,7 @@ export type StoreSelectScalar = {
   updatedAt?: boolean
 }
 
-export type StoreOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "ownerId" | "name" | "slug" | "slugLower" | "description" | "category" | "campus" | "operatingLocation" | "status" | "suspensionReason" | "followersCount" | "createdAt" | "updatedAt", ExtArgs["result"]["store"]>
+export type StoreOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "ownerId" | "name" | "slug" | "slugLower" | "description" | "category" | "campus" | "operatingLocation" | "logo" | "coverImage" | "storeType" | "isVerified" | "verificationType" | "vacationMode" | "status" | "suspensionReason" | "followersCount" | "createdAt" | "updatedAt", ExtArgs["result"]["store"]>
 export type StoreInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   owner?: boolean | Prisma.UserDefaultArgs<ExtArgs>
   listings?: boolean | Prisma.Store$listingsArgs<ExtArgs>
@@ -1119,6 +1365,12 @@ export type $StorePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     category: string | null
     campus: string | null
     operatingLocation: string | null
+    logo: string | null
+    coverImage: string | null
+    storeType: string
+    isVerified: boolean
+    verificationType: string | null
+    vacationMode: boolean
     status: string
     suspensionReason: string | null
     followersCount: number
@@ -1559,6 +1811,12 @@ export interface StoreFieldRefs {
   readonly category: Prisma.FieldRef<"Store", 'String'>
   readonly campus: Prisma.FieldRef<"Store", 'String'>
   readonly operatingLocation: Prisma.FieldRef<"Store", 'String'>
+  readonly logo: Prisma.FieldRef<"Store", 'String'>
+  readonly coverImage: Prisma.FieldRef<"Store", 'String'>
+  readonly storeType: Prisma.FieldRef<"Store", 'String'>
+  readonly isVerified: Prisma.FieldRef<"Store", 'Boolean'>
+  readonly verificationType: Prisma.FieldRef<"Store", 'String'>
+  readonly vacationMode: Prisma.FieldRef<"Store", 'Boolean'>
   readonly status: Prisma.FieldRef<"Store", 'String'>
   readonly suspensionReason: Prisma.FieldRef<"Store", 'String'>
   readonly followersCount: Prisma.FieldRef<"Store", 'Int'>

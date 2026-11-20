@@ -62,7 +62,10 @@ export const ModelName = {
   Order: 'Order',
   Review: 'Review',
   Conversation: 'Conversation',
-  Message: 'Message'
+  Message: 'Message',
+  UserPreference: 'UserPreference',
+  Notification: 'Notification',
+  Banner: 'Banner'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -189,6 +192,12 @@ export const StoreScalarFieldEnum = {
   category: 'category',
   campus: 'campus',
   operatingLocation: 'operatingLocation',
+  logo: 'logo',
+  coverImage: 'coverImage',
+  storeType: 'storeType',
+  isVerified: 'isVerified',
+  verificationType: 'verificationType',
+  vacationMode: 'vacationMode',
   status: 'status',
   suspensionReason: 'suspensionReason',
   followersCount: 'followersCount',
@@ -209,8 +218,14 @@ export const ListingScalarFieldEnum = {
   category: 'category',
   campus: 'campus',
   location: 'location',
+  images: 'images',
+  condition: 'condition',
+  listingType: 'listingType',
+  serviceDetails: 'serviceDetails',
+  slug: 'slug',
   status: 'status',
   pausedBy: 'pausedBy',
+  views: 'views',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -259,6 +274,8 @@ export const ConversationScalarFieldEnum = {
   id: 'id',
   participantA: 'participantA',
   participantB: 'participantB',
+  storeId: 'storeId',
+  context: 'context',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 } as const
@@ -277,12 +294,70 @@ export const MessageScalarFieldEnum = {
 export type MessageScalarFieldEnum = (typeof MessageScalarFieldEnum)[keyof typeof MessageScalarFieldEnum]
 
 
+export const UserPreferenceScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  theme: 'theme',
+  homeFeedPreference: 'homeFeedPreference',
+  emailNotifications: 'emailNotifications',
+  pushNotifications: 'pushNotifications',
+  updatedAt: 'updatedAt'
+} as const
+
+export type UserPreferenceScalarFieldEnum = (typeof UserPreferenceScalarFieldEnum)[keyof typeof UserPreferenceScalarFieldEnum]
+
+
+export const NotificationScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  type: 'type',
+  title: 'title',
+  message: 'message',
+  link: 'link',
+  isRead: 'isRead',
+  readAt: 'readAt',
+  createdAt: 'createdAt'
+} as const
+
+export type NotificationScalarFieldEnum = (typeof NotificationScalarFieldEnum)[keyof typeof NotificationScalarFieldEnum]
+
+
+export const BannerScalarFieldEnum = {
+  id: 'id',
+  placement: 'placement',
+  headline: 'headline',
+  description: 'description',
+  ctaLabel: 'ctaLabel',
+  ctaUrl: 'ctaUrl',
+  imageUrl: 'imageUrl',
+  mobileImageUrl: 'mobileImageUrl',
+  imageAlt: 'imageAlt',
+  targetCategory: 'targetCategory',
+  status: 'status',
+  priority: 'priority',
+  startAt: 'startAt',
+  endAt: 'endAt',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type BannerScalarFieldEnum = (typeof BannerScalarFieldEnum)[keyof typeof BannerScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
 } as const
 
 export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
+
+
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
 export const QueryMode = {
@@ -299,4 +374,13 @@ export const NullsOrder = {
 } as const
 
 export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
+export const JsonNullValueFilter = {
+  DbNull: DbNull,
+  JsonNull: JsonNull,
+  AnyNull: AnyNull
+} as const
+
+export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
 
