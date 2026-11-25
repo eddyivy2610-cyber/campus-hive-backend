@@ -162,9 +162,9 @@ function getLogoUrl(): string {
   if (explicit) return explicit;
   const origin = process.env.CLIENT_ORIGIN?.split(",")[0]?.trim().replace(/\/$/, "");
   if (origin && /^https?:\/\//i.test(origin) && !origin.includes("localhost") && !origin.includes("127.0.0.1")) {
-    return `${origin}/LOGO.png`;
+    return `${origin}/logo-light.png?v=3`;
   }
-  return "";
+  return "https://campushiveng.vercel.app/logo-light.png?v=3";
 }
 
 const purposeConfig: Record<
@@ -213,20 +213,17 @@ const purposeConfig: Record<
  * so it reads clearly and matches typical OTP-input UI patterns.
  */
 function renderOtpBoxes(otp: string): string {
-  const spaced = otp.split("").map((d) => escapeHtml(d)).join("&nbsp;&nbsp;");
-  return `
-    <td style="
-      padding: 18px 32px;
-      background-color: #F8FAFC;
-      border: 1.5px dashed #CBD5E1;
-      border-radius: 12px;
-      text-align: center;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 30px;
-      font-weight: 700;
-      letter-spacing: 6px;
-      color: #0F172A;
-    ">${spaced}</td>`;
+  return otp
+    .split("")
+    .map(
+      (d) => `
+    <td style="padding:0 4px;">
+      <div style="width:42px;height:48px;line-height:48px;border-radius:12px;border:1px solid #DCE0E6;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:20px;font-weight:800;color:#171717;text-align:center;">
+        ${escapeHtml(d)}
+      </div>
+    </td>`
+    )
+    .join("");
 }
 
 /**
@@ -291,26 +288,45 @@ function renderEmailLayout(subject: string, bodyHtml: string): string {
 }
 
 function renderHtml(otp: string, config: (typeof purposeConfig)[OtpPurpose]): string {
-  const body = `
-    <h1 style="margin:0 0 10px; font-size:20px; font-weight:700; line-height:1.35; color:${BRAND.text};">
-      ${escapeHtml(config.heading)}
-    </h1>
-    <p style="margin:0 0 24px; font-size:15px; line-height:1.6; color:${BRAND.muted};">
-      ${escapeHtml(config.intro)} Use the 6-digit code below to ${escapeHtml(config.action)}.
-    </p>
+  const logoUrl = getLogoUrl();
 
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px;">
-      <tr>${renderOtpBoxes(otp)}</tr>
-    </table>
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<meta name="supported-color-schemes" content="light" />
+<title>${escapeHtml(config.subject)}</title>
+</head>
+<body style="margin:0; padding:40px 16px; background-color:#F7F8FA; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#171717;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:440px; margin:0 auto;">
+    <tr>
+      <td align="center" style="padding-bottom:24px;">
+        <img src="${escapeHtml(logoUrl)}" width="132" alt="Campus Hive" style="display:block; width:132px; height:auto; margin:0 auto; border:0;" />
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#FFFFFF; border:1px solid #ECEEF2; border-radius:24px; padding:36px 28px; box-shadow:0 12px 40px rgba(0,0,0,0.03);">
+        <h1 style="margin:0 0 24px; font-size:20px; font-weight:700; line-height:1.35; color:#171717; letter-spacing:-0.01em;">
+          Here is your verification code
+        </h1>
 
-    <p style="margin:0 0 8px; font-size:13px; color:${BRAND.muted};">
-      This code will expire in <strong style="color:${BRAND.text};">10 minutes</strong>.
-    </p>
-    <p style="margin:0; font-size:13px; color:${BRAND.muted};">
-      If you did not request this verification code, you can safely ignore this email.
-    </p>`;
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 24px;">
+          <tr>${renderOtpBoxes(otp)}</tr>
+        </table>
 
-  return renderEmailLayout(config.subject, body);
+        <p style="margin:0 0 8px; font-size:13px; line-height:1.5; color:#6B7280;">
+          This code expires in <strong style="color:#171717;">10 minutes</strong>.
+        </p>
+        <p style="margin:0; font-size:13px; line-height:1.5; color:#9CA3AF;">
+          Do not share this code with anyone. If you didn&rsquo;t request this, you can safely ignore this email.
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 function renderText(otp: string, config: (typeof purposeConfig)[OtpPurpose]): string {

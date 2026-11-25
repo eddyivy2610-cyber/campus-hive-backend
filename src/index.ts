@@ -33,12 +33,15 @@ app.use(
     directives: { defaultSrc: "'self'", scriptSrc: "'self'" },
   })
 );
-const ALLOWED_ORIGINS = (
+const RAW_CLIENT_ORIGINS =
   process.env.CLIENT_ORIGIN ||
-  "http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:5000"
-)
+  process.env.ALLOWED_ORIGINS ||
+  process.env.APP_ALLOWED_ORIGINS ||
+  "http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:5000,https://campushiveng.vercel.app";
+
+const ALLOWED_ORIGINS = RAW_CLIENT_ORIGINS
   .split(",")
-  .map((s) => s.trim())
+  .map((s) => s.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
 app.use(
