@@ -31,7 +31,20 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const { name, slug, description, category, campus, operatingLocation, logo, coverImage, storeType } = req.body || {};
+    const {
+      name,
+      slug,
+      description,
+      category,
+      campus,
+      operatingLocation,
+      logo,
+      coverImage,
+      storeType,
+      sellerType,
+      verificationType,
+      fullName,
+    } = req.body || {};
     if (!name || typeof name !== "string" || !name.trim()) {
       res.status(400).json({ message: "Store name is required", error: "bad_request" });
       return;
@@ -43,6 +56,17 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
         : `${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
     const slugLower = rawSlug.toLowerCase();
 
+    const resolvedStoreType =
+      storeType === "local_business" || sellerType === "non_student"
+        ? "local_business"
+        : "student_store";
+    const resolvedVerificationType =
+      typeof verificationType === "string" && verificationType.trim()
+        ? verificationType.trim()
+        : sellerType === "non_student"
+        ? "location_proof"
+        : "student_id";
+
     const store = await prisma.$transaction(async (tx) => {
       const updated = await tx.user.updateMany({
         where: {
@@ -51,6 +75,9 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
         },
         data: {
           storesCount: { increment: 1 },
+          ...(typeof fullName === "string" && fullName.trim()
+            ? { fullName: fullName.trim(), displayName: fullName.trim() }
+            : {}),
         },
       });
 
@@ -71,7 +98,8 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
           operatingLocation: typeof operatingLocation === "string" ? operatingLocation : null,
           logo: typeof logo === "string" ? logo : null,
           coverImage: typeof coverImage === "string" ? coverImage : null,
-          storeType: storeType === "local_business" ? "local_business" : "student_store",
+          storeType: resolvedStoreType,
+          verificationType: resolvedVerificationType,
         },
         select: {
           ...PUBLIC_STORE_SELECT,

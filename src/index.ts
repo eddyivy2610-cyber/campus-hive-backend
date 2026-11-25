@@ -82,8 +82,8 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.get("/health/live", (req: Request, res: Response) => {
   res.setHeader("X-Backend-Identity", "pg-express");
