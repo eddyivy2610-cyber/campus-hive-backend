@@ -121,18 +121,19 @@ export async function signUpload(req: AuthenticatedRequest, res: Response): Prom
   const timestamp = Math.floor(Date.now() / 1000);
   const folder = `campushive/${purpose}/${userId}`;
   const publicId = crypto.randomUUID();
-  const accessType = purpose === "business_document" ? "authenticated" : "public";
-  const paramsToSign =
-    accessType === "authenticated"
-      ? `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}&type=authenticated`
-      : `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}`;
+  const isPrivate = purpose === "business_document";
+  const accessType = isPrivate ? "authenticated" : "upload";
+  const resourceType = ext === ".pdf" ? "raw" : "image";
+  const paramsToSign = isPrivate
+    ? `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}&type=authenticated`
+    : `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}`;
 
   const signature = crypto
     .createHash("sha1")
     .update(`${paramsToSign}${apiSecret}`)
     .digest("hex");
 
-  const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
 
   res.status(200).json({
     success: true,
