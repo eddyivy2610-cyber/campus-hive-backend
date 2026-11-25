@@ -44,6 +44,9 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
       sellerType,
       verificationType,
       fullName,
+      studentIdImage,
+      locationProofDocument,
+      contact,
     } = req.body || {};
     if (!name || typeof name !== "string" || !name.trim()) {
       res.status(400).json({ message: "Store name is required", error: "bad_request" });
@@ -85,7 +88,7 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
         throw Object.assign(new Error("Store cap reached"), { code: "STORE_CAP_EXCEEDED" });
       }
 
-      return tx.store.create({
+      const createdStore = await tx.store.create({
         data: {
           ownerId: userId,
           name: name.trim(),
@@ -106,6 +109,29 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
           ownerId: true,
         },
       });
+
+      const docUrl =
+        typeof studentIdImage === "string" && studentIdImage.trim()
+          ? studentIdImage.trim()
+          : typeof locationProofDocument === "string" && locationProofDocument.trim()
+          ? locationProofDocument.trim()
+          : null;
+
+      await tx.sellerApplication.create({
+        data: {
+          userId,
+          storeId: createdStore.id,
+          businessName: name.trim(),
+          category: typeof category === "string" ? category : null,
+          campus: typeof campus === "string" ? campus : null,
+          operatingLocation: typeof operatingLocation === "string" ? operatingLocation : null,
+          studentIdUrl: docUrl,
+          notes: contact && typeof contact === "object" ? JSON.stringify({ sellerType, contact }) : null,
+          status: "pending",
+        },
+      });
+
+      return createdStore;
     });
 
     res.status(201).json({ success: true, data: store });
@@ -134,14 +160,20 @@ export async function listMyStores(req: AuthenticatedRequest, res: Response): Pr
       return;
     }
 
-    const stores = await prisma.store.findMany({
-      where: { ownerId: userId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        ...PUBLIC_STORE_SELECT,
-        ownerId: true,
-      },
-    });
+    const [stores, latestApplication] = await Promise.all([
+      prisma.store.findMany({
+        where: { ownerId: userId },
+        orderBy: { createdAt: "desc" },
+        select: {
+          ...PUBLIC_STORE_SELECT,
+          ownerId: true,
+        },
+      }),
+      prisma.sellerApplication.findFirst({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
 
     const formatted = stores.map((s) => toPublicStore(s));
     const activeStores = formatted.filter((s) => s.status === "active");
@@ -155,6 +187,7 @@ export async function listMyStores(req: AuthenticatedRequest, res: Response): Pr
         activeStores,
         store: activeStores[0] || null,
         pendingStore: pendingStores[0] || null,
+        businessApplication: latestApplication || null,
         hasStore: activeStores.length > 0,
         hasPendingApplication: pendingStores.length > 0,
         maxStores: MAX_STORES_PER_USER,
