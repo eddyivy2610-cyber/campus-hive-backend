@@ -618,19 +618,30 @@ export async function adminListBusinessApplications(req: AuthenticatedRequest, r
     const formatted = applications.map((app) => {
       const owner = userMap.get(app.userId);
       let parsedNotes: any = {};
+      let readableNotes: string | undefined = undefined;
       if (app.notes) {
         try {
           parsedNotes = JSON.parse(app.notes);
-        } catch {}
+        } catch {
+          readableNotes = app.notes;
+        }
       }
+      const sellerType = parsedNotes?.sellerType === "non_student" ? "non_student" : "student";
+      const docs = app.studentIdUrl ? [app.studentIdUrl] : [];
       return {
         ...app,
         _id: app.id,
+        applicantId: app.userId,
+        businessCategory: app.category || "General",
+        registeredBusinessName: owner?.displayName || owner?.fullName || app.businessName,
+        cacNumber: sellerType === "student" ? "Student ID Card" : "Location Proof",
+        supportingDocuments: docs,
+        notes: readableNotes,
         status: app.status === "pending" ? "pending_review" : app.status,
         contactEmail: parsedNotes?.contact?.email || owner?.email || "",
         contactPhone: parsedNotes?.contact?.phone || "",
         applicantName: owner?.displayName || owner?.fullName || app.businessName,
-        sellerType: parsedNotes?.sellerType || "student",
+        sellerType,
         studentIdImage: app.studentIdUrl || undefined,
         locationProofDocument: app.studentIdUrl || undefined,
         submittedAt: app.createdAt.toISOString(),
@@ -795,13 +806,90 @@ export async function adminDeleteListing(req: AuthenticatedRequest, res: Respons
 
 export async function adminListReports(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+    const status = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : "";
+    const targetType = typeof req.query.targetType === "string" ? req.query.targetType.trim().toLowerCase() : "";
+
+    const statusFilter =
+      !status || status === "all"
+        ? {}
+        : status === "pending" || status === "open"
+        ? { status: { in: ["open", "pending"] } }
+        : { status };
+
     const reports = await prisma.report.findMany({
-      where: status && status !== "all" ? { status } : {},
+      where: {
+        ...statusFilter,
+        ...(targetType && targetType !== "all" ? { targetType } : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: 100,
     });
-    res.status(200).json({ success: true, data: reports });
+
+    const reporterIds = Array.from(
+      new Set(reports.map((r) => r.reporterId).filter((id) => id && id !== "guest"))
+    );
+    const users = reporterIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: reporterIds } },
+          select: { id: true, email: true, fullName: true, displayName: true, username: true },
+        })
+      : [];
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    const formatted = reports.map((r) => {
+      const user = userMap.get(r.reporterId);
+      let supportMeta: any = null;
+      if (r.targetType === "support" && r.details) {
+        try {
+          supportMeta = JSON.parse(r.details);
+        } catch {}
+      }
+
+      const displayStatus =
+        r.status === "open" || r.status === "pending"
+          ? "Pending"
+          : r.status === "in_review"
+          ? "In Review"
+          : r.status === "resolved"
+          ? "Resolved"
+          : "Dismissed";
+
+      const priority =
+        ["scam", "harassment", "prohibited_item"].includes(r.reason)
+          ? "High"
+          : r.targetType === "support"
+          ? "Medium"
+          : "Medium";
+
+      return {
+        ...r,
+        _id: r.id,
+        category: r.targetType === "support" ? `Support: ${r.reason}` : r.reason,
+        details: supportMeta?.message || r.details || r.reason,
+        status: displayStatus,
+        priority,
+        reporter: {
+          id: r.reporterId,
+          name:
+            supportMeta?.name ||
+            user?.displayName ||
+            user?.fullName ||
+            user?.username ||
+            "Campus User",
+          email: supportMeta?.email || user?.email || "",
+        },
+        against: {
+          id: r.targetId,
+          name:
+            r.targetType === "support"
+              ? `Help & Support (${r.reason})`
+              : `${r.targetType} #${r.targetId.slice(0, 8)}`,
+          type: r.targetType,
+        },
+      };
+    });
+
+    res.status(200).json({ success: true, data: formatted });
   } catch (err) {
     console.error("[adminListReports] Error:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
@@ -811,18 +899,62 @@ export async function adminListReports(req: AuthenticatedRequest, res: Response)
 export async function adminUpdateReport(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const id = String(req.params.id || "");
-    const { status, resolutionNote } = req.body || {};
-    if (!["open", "resolved", "dismissed"].includes(String(status || ""))) {
-      res.status(400).json({ success: false, message: "Invalid report status" });
+    const { status, resolutionNote, resolution, notes } = req.body || {};
+
+    let nextStatus = typeof status === "string" ? status.trim().toLowerCase() : "";
+    if (!nextStatus && typeof resolution === "string") {
+      nextStatus = resolution === "none" ? "dismissed" : "resolved";
+    }
+
+    if (!["open", "in_review", "resolved", "dismissed"].includes(nextStatus)) {
+      res.status(400).json({ success: false, message: "Invalid report status or resolution" });
       return;
     }
+
+    const effectiveNote =
+      typeof notes === "string" && notes.trim()
+        ? notes.trim()
+        : typeof resolutionNote === "string" && resolutionNote.trim()
+        ? resolutionNote.trim()
+        : null;
+
+    const existing = await prisma.report.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ success: false, message: "Report not found" });
+      return;
+    }
+
+    // Apply moderation side-effect if requested
+    if (resolution === "remove_listing" && existing.targetType === "listing") {
+      await prisma.listing
+        .update({ where: { id: existing.targetId }, data: { status: "removed" } })
+        .catch(() => {});
+    } else if (resolution === "suspend_store" && existing.targetType === "store") {
+      await prisma.store
+        .update({
+          where: { id: existing.targetId },
+          data: { status: "suspended", suspensionReason: effectiveNote || "Policy violation" },
+        })
+        .catch(() => {});
+    } else if (
+      (resolution === "suspend_user" || resolution === "ban_user") &&
+      existing.targetType === "user"
+    ) {
+      await prisma.user
+        .update({
+          where: { id: existing.targetId },
+          data: { accountStatus: resolution === "ban_user" ? "BANNED" : "SUSPENDED" },
+        })
+        .catch(() => {});
+    }
+
     const updated = await prisma.report.update({
       where: { id },
       data: {
-        status: String(status),
-        resolutionNote: typeof resolutionNote === "string" ? resolutionNote : null,
-        resolvedBy: status === "open" ? null : req.auth?.userId || null,
-        resolvedAt: status === "open" ? null : new Date(),
+        status: nextStatus,
+        resolutionNote: effectiveNote,
+        resolvedBy: nextStatus === "open" ? null : req.auth?.userId || null,
+        resolvedAt: nextStatus === "open" ? null : new Date(),
       },
     });
     await writeAdminLog({
@@ -830,7 +962,7 @@ export async function adminUpdateReport(req: AuthenticatedRequest, res: Response
       action: "update_report",
       targetType: "report",
       targetId: id,
-      details: { status, resolutionNote },
+      details: { status: nextStatus, resolution, resolutionNote: effectiveNote },
     });
     res.status(200).json({ success: true, data: updated });
   } catch (err) {
@@ -900,26 +1032,29 @@ export async function adminCreateBanner(req: AuthenticatedRequest, res: Response
       endAt,
     } = req.body || {};
 
-    if (!headline || !imageUrl) {
-      res.status(400).json({ success: false, message: "headline and imageUrl are required" });
+    if (!imageUrl) {
+      res.status(400).json({ success: false, message: "imageUrl is required" });
       return;
     }
+
+    const parsedStartAt = startAt ? new Date(startAt) : null;
+    const parsedEndAt = endAt ? new Date(endAt) : null;
 
     const banner = await prisma.banner.create({
       data: {
         placement: typeof placement === "string" && placement ? placement : "homepage_hero",
-        headline: String(headline),
-        description: typeof description === "string" ? description : null,
-        ctaLabel: typeof ctaLabel === "string" ? ctaLabel : null,
-        ctaUrl: typeof ctaUrl === "string" ? ctaUrl : null,
+        headline: typeof headline === "string" && headline.trim() ? headline.trim() : "Promotional Banner",
+        description: typeof description === "string" && description.trim() ? description.trim() : null,
+        ctaLabel: typeof ctaLabel === "string" && ctaLabel.trim() ? ctaLabel.trim() : null,
+        ctaUrl: typeof ctaUrl === "string" && ctaUrl.trim() ? ctaUrl.trim() : null,
         imageUrl: String(imageUrl),
         mobileImageUrl: typeof mobileImageUrl === "string" ? mobileImageUrl : null,
         imageAlt: typeof imageAlt === "string" ? imageAlt : null,
         targetCategory: typeof targetCategory === "string" ? targetCategory : null,
         status: typeof status === "string" && status ? status : "published",
         priority: Number.isFinite(Number(priority)) ? Number(priority) : 0,
-        startAt: startAt ? new Date(startAt) : null,
-        endAt: endAt ? new Date(endAt) : null,
+        startAt: parsedStartAt && !Number.isNaN(parsedStartAt.getTime()) ? parsedStartAt : null,
+        endAt: parsedEndAt && !Number.isNaN(parsedEndAt.getTime()) ? parsedEndAt : null,
       },
     });
     res.status(201).json({ success: true, data: banner });
@@ -947,6 +1082,12 @@ export async function adminUpdateBanner(req: AuthenticatedRequest, res: Response
         ...(body.targetCategory !== undefined ? { targetCategory: body.targetCategory ? String(body.targetCategory) : null } : {}),
         ...(body.status !== undefined ? { status: String(body.status) } : {}),
         ...(body.priority !== undefined ? { priority: Number(body.priority) || 0 } : {}),
+        ...(body.startAt !== undefined
+          ? { startAt: body.startAt ? new Date(body.startAt) : null }
+          : {}),
+        ...(body.endAt !== undefined
+          ? { endAt: body.endAt ? new Date(body.endAt) : null }
+          : {}),
       },
     });
     res.status(200).json({ success: true, data: banner });

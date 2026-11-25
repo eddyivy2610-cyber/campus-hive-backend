@@ -13,6 +13,7 @@ import realtimeRoute from "./realtime.route.ts";
 import { authenticate, AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 import { getMe } from "../controllers/auth.controller.ts";
 import { listFollowing } from "../controllers/follow.controller.ts";
+import { verifyAccessToken } from "../services/token.service.ts";
 import prisma from "../prisma.ts";
 
 const router = Router();
@@ -248,6 +249,84 @@ router.patch("/notifications/:id", authenticate, async (req: AuthenticatedReques
   } catch (err) {
     console.error("[PATCH /notifications/:id] Error:", err);
     res.status(500).json({ message: "Failed to update notification" });
+  }
+});
+
+router.post("/reports", authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+    const rawType = String(req.body?.targetType || req.body?.reportType || "listing").toLowerCase();
+    const targetType = rawType === "profile" ? "store" : rawType;
+    const targetId = String(req.body?.targetId || "").trim();
+    const reason = String(req.body?.reason || "other").trim().toLowerCase();
+    const details = typeof req.body?.details === "string" ? req.body.details.trim().slice(0, 1000) : "";
+
+    if (!targetId) {
+      res.status(400).json({ success: false, message: "targetId is required" });
+      return;
+    }
+    if (!details && reason === "other") {
+      res.status(400).json({ success: false, message: "Please provide details for the report." });
+      return;
+    }
+
+    const report = await prisma.report.create({
+      data: {
+        reporterId: userId,
+        targetType,
+        targetId,
+        reason,
+        details: details || reason,
+        status: "open",
+      },
+    });
+    res.status(201).json({ success: true, data: report });
+  } catch (err) {
+    console.error("[POST /reports] Error:", err);
+    res.status(500).json({ success: false, message: "Failed to submit report." });
+  }
+});
+
+router.post("/support", async (req, res) => {
+  try {
+    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    const category = typeof req.body?.category === "string" ? req.body.category.trim() : "general";
+    const message = typeof req.body?.message === "string" ? req.body.message.trim().slice(0, 2000) : "";
+
+    if (!name || !email || !message) {
+      res.status(400).json({ success: false, message: "Name, email, and message are required." });
+      return;
+    }
+
+    let reporterId = "guest";
+    const authHeader = req.headers.authorization;
+    const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+    const cookieToken = (req as any).cookies?.accessToken || null;
+    const token = bearer || cookieToken;
+    if (token) {
+      const decoded = await verifyAccessToken(token).catch(() => null);
+      if (decoded?.userId) reporterId = decoded.userId;
+    }
+
+    const report = await prisma.report.create({
+      data: {
+        reporterId,
+        targetType: "support",
+        targetId: category,
+        reason: category,
+        details: JSON.stringify({ name, email, category, message }),
+        status: "open",
+      },
+    });
+    res.status(201).json({ success: true, data: report });
+  } catch (err) {
+    console.error("[POST /support] Error:", err);
+    res.status(500).json({ success: false, message: "Failed to submit support request." });
   }
 });
 
