@@ -203,14 +203,17 @@ export async function listMyStores(req: AuthenticatedRequest, res: Response): Pr
 
 export async function getPublicStore(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const slug = String(req.params.slug || "").trim().toLowerCase();
+    const rawSlug = String(req.params.slug || "").trim();
+    const slug = rawSlug.toLowerCase();
     if (!slug) {
       res.status(404).json({ message: "Store not found", error: "not_found" });
       return;
     }
 
-    const store = await prisma.store.findUnique({
-      where: { slugLower: slug },
+    const store = await prisma.store.findFirst({
+      where: {
+        OR: [{ slugLower: slug }, { id: rawSlug }],
+      },
     });
 
     if (!store || store.status !== "active") {

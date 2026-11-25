@@ -40,9 +40,27 @@ export async function signup(req: Request, res: Response): Promise<void> {
 
     // Hash the password using Argon2id (no 72-byte truncation)
     const hashedPassword = await hashPassword(password);
-    // generate unique username based on fullName and a random hex suffix
-    const randomSuffix = crypto.randomBytes(4).toString("hex");
-    const username = `${fullName.split(" ")[0].replace(/\s+/g, "").toLowerCase()}${randomSuffix}_hive`;
+    // Generate short, natural unique username like john_123
+    const baseName =
+      String(fullName)
+        .trim()
+        .split(/\s+/)[0]
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .toLowerCase()
+        .slice(0, 12) || "user";
+
+    let username = `${baseName}_${crypto.randomInt(100, 1000)}`;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const taken = await prisma.user.findUnique({
+        where: { username },
+        select: { id: true },
+      });
+      if (!taken) break;
+      username =
+        attempt < 3
+          ? `${baseName}_${crypto.randomInt(100, 1000)}`
+          : `${baseName}_${crypto.randomInt(1000, 10000)}`;
+    }
     // Create new user (explicitly PENDING and BUYER; schema also defaults to PENDING/BUYER)
     const newUser = await prisma.user.create({
       data: {
