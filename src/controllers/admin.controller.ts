@@ -513,9 +513,16 @@ export async function adminListBusinessApplications(req: AuthenticatedRequest, r
       }
     }
 
+    const statusFilter =
+      !status || status === "all"
+        ? {}
+        : status === "pending_review" || status === "pending"
+        ? { status: { in: ["pending", "pending_review"] } }
+        : { status };
+
     const applications = await prisma.sellerApplication.findMany({
       where: {
-        ...(status && status !== "all" ? { status } : {}),
+        ...statusFilter,
         ...(campus && campus !== "all" ? { campus } : {}),
       },
       orderBy: { createdAt: "desc" },
@@ -542,6 +549,7 @@ export async function adminListBusinessApplications(req: AuthenticatedRequest, r
       return {
         ...app,
         _id: app.id,
+        status: app.status === "pending" ? "pending_review" : app.status,
         contactEmail: parsedNotes?.contact?.email || owner?.email || "",
         contactPhone: parsedNotes?.contact?.phone || "",
         applicantName: owner?.displayName || owner?.fullName || app.businessName,
