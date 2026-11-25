@@ -474,12 +474,85 @@ export async function adminUpdateStoreStatus(req: AuthenticatedRequest, res: Res
 export async function adminListBusinessApplications(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
+    const campus = typeof req.query.campus === "string" ? req.query.campus.trim() : "";
+
+    // Backfill any pending_review Store that was created before SellerApplication linking
+    const pendingStores = await prisma.store.findMany({
+      where: { status: "pending_review" },
+      select: {
+        id: true,
+        ownerId: true,
+        name: true,
+        category: true,
+        campus: true,
+        operatingLocation: true,
+        storeType: true,
+        createdAt: true,
+      },
+    });
+    if (pendingStores.length > 0) {
+      const existingApps = await prisma.sellerApplication.findMany({
+        where: { storeId: { in: pendingStores.map((s) => s.id) } },
+        select: { storeId: true },
+      });
+      const existingStoreIds = new Set(existingApps.map((a) => a.storeId).filter(Boolean));
+      const missingStores = pendingStores.filter((s) => !existingStoreIds.has(s.id));
+      if (missingStores.length > 0) {
+        await prisma.sellerApplication.createMany({
+          data: missingStores.map((s) => ({
+            userId: s.ownerId,
+            storeId: s.id,
+            businessName: s.name,
+            category: s.category,
+            campus: s.campus,
+            operatingLocation: s.operatingLocation,
+            status: "pending",
+            createdAt: s.createdAt,
+          })),
+        });
+      }
+    }
+
     const applications = await prisma.sellerApplication.findMany({
-      where: status && status !== "all" ? { status } : {},
+      where: {
+        ...(status && status !== "all" ? { status } : {}),
+        ...(campus && campus !== "all" ? { campus } : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: 100,
     });
-    res.status(200).json({ success: true, data: applications });
+
+    const userIds = Array.from(new Set(applications.map((a) => a.userId)));
+    const users = userIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, email: true, fullName: true, displayName: true },
+        })
+      : [];
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    const formatted = applications.map((app) => {
+      const owner = userMap.get(app.userId);
+      let parsedNotes: any = {};
+      if (app.notes) {
+        try {
+          parsedNotes = JSON.parse(app.notes);
+        } catch {}
+      }
+      return {
+        ...app,
+        _id: app.id,
+        contactEmail: parsedNotes?.contact?.email || owner?.email || "",
+        contactPhone: parsedNotes?.contact?.phone || "",
+        applicantName: owner?.displayName || owner?.fullName || app.businessName,
+        sellerType: parsedNotes?.sellerType || "student",
+        studentIdImage: app.studentIdUrl || undefined,
+        locationProofDocument: app.studentIdUrl || undefined,
+        submittedAt: app.createdAt.toISOString(),
+      };
+    });
+
+    res.status(200).json({ success: true, data: formatted });
   } catch (err) {
     console.error("[adminListBusinessApplications] Error:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
@@ -489,24 +562,34 @@ export async function adminListBusinessApplications(req: AuthenticatedRequest, r
 export async function adminReviewBusinessApplication(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const id = String(req.params.id || "");
-    const { action, reviewNote } = req.body || {};
-    if (action !== "approve" && action !== "reject") {
-      res.status(400).json({ success: false, message: "action must be 'approve' or 'reject'" });
+    const { action, reviewNote, reason, adminNotes } = req.body || {};
+    if (action !== "approve" && action !== "reject" && action !== "request_changes") {
+      res.status(400).json({ success: false, message: "action must be 'approve', 'reject', or 'request_changes'" });
       return;
     }
+    const resolvedNote =
+      typeof reason === "string" && reason.trim()
+        ? reason.trim()
+        : typeof reviewNote === "string" && reviewNote.trim()
+        ? reviewNote.trim()
+        : typeof adminNotes === "string" && adminNotes.trim()
+        ? adminNotes.trim()
+        : null;
+
     const appDoc = await prisma.sellerApplication.findUnique({ where: { id } });
     if (!appDoc) {
       res.status(404).json({ success: false, message: "Application not found" });
       return;
     }
 
-    const nextStatus = action === "approve" ? "approved" : "rejected";
+    const nextStatus =
+      action === "approve" ? "approved" : action === "reject" ? "rejected" : "changes_requested";
     const updated = await prisma.$transaction(async (tx) => {
       const appRow = await tx.sellerApplication.update({
         where: { id },
         data: {
           status: nextStatus,
-          reviewNote: typeof reviewNote === "string" ? reviewNote : null,
+          reviewNote: resolvedNote,
           reviewedBy: req.auth?.userId || null,
           reviewedAt: new Date(),
         },
@@ -522,6 +605,11 @@ export async function adminReviewBusinessApplication(req: AuthenticatedRequest, 
             data: { status: "active", isVerified: true, verificationType: "student" },
           });
         }
+      } else if (action === "reject" && appDoc.storeId) {
+        await tx.store.update({
+          where: { id: appDoc.storeId },
+          data: { status: "rejected", suspensionReason: resolvedNote },
+        });
       }
       await tx.notification.create({
         data: {
@@ -534,7 +622,9 @@ export async function adminReviewBusinessApplication(req: AuthenticatedRequest, 
           message:
             action === "approve"
               ? `Your storefront "${appDoc.businessName}" has been approved.`
-              : `Your application for "${appDoc.businessName}" was not approved${reviewNote ? `: ${reviewNote}` : "."}`,
+              : `Your application for "${appDoc.businessName}" was ${
+                  action === "reject" ? "not approved" : "returned for changes"
+                }${resolvedNote ? `: ${resolvedNote}` : "."}`,
           link: action === "approve" ? "/stores" : "/onboarding/seller?retry=true",
         },
       });
