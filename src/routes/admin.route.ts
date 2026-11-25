@@ -3,6 +3,8 @@ import { requireAdmin } from "../middlewares/auth.middleware.ts";
 import {
   adminAnalytics,
   adminAuthMe,
+  adminSignIn,
+  adminSignUp,
   adminCreateBanner,
   adminDeleteBanner,
   adminDeleteListing,
@@ -29,6 +31,8 @@ import {
 const router = Router();
 
 // Admin Auth
+router.post("/auth/signin", adminSignIn);
+router.post("/auth/signup", adminSignUp);
 router.get("/auth/me", requireAdmin, adminAuthMe);
 
 // Overview, Analytics & Audit Logs

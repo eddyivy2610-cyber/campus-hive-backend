@@ -1,7 +1,11 @@
+import crypto from "node:crypto";
+import argon2 from "argon2";
+import bcrypt from "bcrypt";
 import { Response } from "express";
 import prisma from "../prisma.ts";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 import { toPublicListing, toPublicStore } from "../lib/serializers.ts";
+import { generateAccessToken } from "../services/token.service.ts";
 
 async function writeAdminLog(params: {
   adminId: string;
@@ -22,6 +26,160 @@ async function writeAdminLog(params: {
     });
   } catch (err) {
     console.warn("[AdminLog] Failed to write audit log:", err);
+  }
+}
+
+export async function adminSignIn(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const rawIdentity =
+      typeof req.body?.identity === "string"
+        ? req.body.identity.trim().toLowerCase()
+        : typeof req.body?.email === "string"
+        ? req.body.email.trim().toLowerCase()
+        : "";
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+
+    if (!rawIdentity || !password) {
+      res.status(400).json({ success: false, message: "Username/email and password are required." });
+      return;
+    }
+
+    const user = await prisma.user.findFirst({
+      where: {
+        role: "ADMIN",
+        OR: [{ email: rawIdentity }, { username: rawIdentity }],
+      },
+    });
+
+    if (!user) {
+      res.status(401).json({ success: false, message: "Invalid admin credentials." });
+      return;
+    }
+
+    if (user.accountStatus === "SUSPENDED" || user.accountStatus === "BANNED") {
+      res.status(403).json({ success: false, message: "This administrator account is disabled." });
+      return;
+    }
+
+    let validPassword = false;
+    try {
+      if (user.passwordHash.startsWith("$2")) {
+        validPassword = await bcrypt.compare(password, user.passwordHash);
+      } else {
+        validPassword = await argon2.verify(user.passwordHash, password);
+      }
+    } catch {
+      validPassword = false;
+    }
+
+    if (!validPassword) {
+      res.status(401).json({ success: false, message: "Invalid admin credentials." });
+      return;
+    }
+
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        status: "ACTIVE",
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    const token = generateAccessToken(user.id, session.id, user.tokenVersion);
+    const isProd = process.env.NODE_ENV === "production";
+    res.cookie("accessToken", token, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.status(200).json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+      },
+    });
+  } catch (err) {
+    console.error("[adminSignIn] Error:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+}
+
+export async function adminSignUp(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const username = typeof req.body?.username === "string" ? req.body.username.trim().toLowerCase() : "";
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const providedKey =
+      typeof req.body?.adminKey === "string"
+        ? req.body.adminKey.trim()
+        : typeof req.body?.key === "string"
+        ? req.body.key.trim()
+        : "";
+
+    const configuredKey = process.env.ADMIN_REGISTRATION_KEY?.trim();
+    if (!configuredKey) {
+      res.status(503).json({
+        success: false,
+        message: "Admin registration is not configured on the server.",
+      });
+      return;
+    }
+
+    const keysMatch =
+      providedKey.length === configuredKey.length &&
+      crypto.timingSafeEqual(Buffer.from(providedKey), Buffer.from(configuredKey));
+    if (!keysMatch) {
+      res.status(403).json({ success: false, message: "Invalid administrator registration key." });
+      return;
+    }
+
+    if (!email || !email.includes("@") || !username || password.length < 8) {
+      res.status(400).json({
+        success: false,
+        message: "Valid email, username, and password (min 8 characters) are required.",
+      });
+      return;
+    }
+
+    const existing = await prisma.user.findFirst({
+      where: { OR: [{ email }, { username }] },
+      select: { id: true },
+    });
+    if (existing) {
+      res.status(409).json({ success: false, message: "Email or username already exists." });
+      return;
+    }
+
+    const passwordHash = await argon2.hash(password);
+    const admin = await prisma.user.create({
+      data: {
+        email,
+        username,
+        fullName: username,
+        displayName: username,
+        passwordHash,
+        role: "ADMIN",
+        accountStatus: "ACTIVE",
+        isEmailVerified: true,
+      },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+      },
+    });
+
+    res.status(201).json({ success: true, admin, user: admin });
+  } catch (err) {
+    console.error("[adminSignUp] Error:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 }
 
