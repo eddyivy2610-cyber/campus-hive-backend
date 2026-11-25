@@ -216,6 +216,42 @@ export async function adminAuthMe(req: AuthenticatedRequest, res: Response): Pro
 
 export async function adminOverview(_req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
+    // Ensure any pending_review stores are represented in SellerApplication
+    const pendingReviewStores = await prisma.store.findMany({
+      where: { status: "pending_review" },
+      select: {
+        id: true,
+        ownerId: true,
+        name: true,
+        category: true,
+        campus: true,
+        operatingLocation: true,
+        createdAt: true,
+      },
+    });
+    if (pendingReviewStores.length > 0) {
+      const existing = await prisma.sellerApplication.findMany({
+        where: { storeId: { in: pendingReviewStores.map((s) => s.id) } },
+        select: { storeId: true },
+      });
+      const existingIds = new Set(existing.map((e) => e.storeId).filter(Boolean));
+      const missing = pendingReviewStores.filter((s) => !existingIds.has(s.id));
+      if (missing.length > 0) {
+        await prisma.sellerApplication.createMany({
+          data: missing.map((s) => ({
+            userId: s.ownerId,
+            storeId: s.id,
+            businessName: s.name,
+            category: s.category,
+            campus: s.campus,
+            operatingLocation: s.operatingLocation,
+            status: "pending",
+            createdAt: s.createdAt,
+          })),
+        });
+      }
+    }
+
     const [
       totalUsers,
       activeUsers,
@@ -224,9 +260,13 @@ export async function adminOverview(_req: AuthenticatedRequest, res: Response): 
       pendingStores,
       totalListings,
       activeListings,
+      pendingListings,
       totalOrders,
       openReports,
       pendingApplications,
+      approvedApplications,
+      recentAppRows,
+      recentListingRows,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { accountStatus: "ACTIVE" } }),
@@ -235,14 +275,51 @@ export async function adminOverview(_req: AuthenticatedRequest, res: Response): 
       prisma.store.count({ where: { status: "pending_review" } }),
       prisma.listing.count(),
       prisma.listing.count({ where: { status: "active" } }),
+      prisma.listing.count({ where: { status: "pending_review" } }),
       prisma.order.count(),
       prisma.report.count({ where: { status: "open" } }),
-      prisma.sellerApplication.count({ where: { status: "pending" } }),
+      prisma.sellerApplication.count({ where: { status: { in: ["pending", "pending_review"] } } }),
+      prisma.sellerApplication.count({ where: { status: "approved" } }),
+      prisma.sellerApplication.findMany({
+        where: { status: { in: ["pending", "pending_review"] } },
+        orderBy: { createdAt: "desc" },
+        take: 6,
+      }),
+      prisma.listing.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 6,
+        include: { store: { select: { id: true, name: true } } },
+      }),
     ]);
+
+    const recentApplications = recentAppRows.map((app) => ({
+      ...app,
+      _id: app.id,
+      status: app.status === "pending" ? "pending_review" : app.status,
+      businessCategory: app.category || "General",
+    }));
+
+    const recentListings = recentListingRows.map((l) => ({
+      ...l,
+      _id: l.id,
+      storeName: l.store?.name || "Campus Store",
+    }));
 
     res.status(200).json({
       success: true,
       data: {
+        stats: {
+          pendingApplications,
+          approvedApplications,
+          pendingListings,
+          activeListings,
+          totalListings,
+          activeStores,
+          totalStores,
+          registeredUsers: totalUsers,
+        },
+        recentApplications,
+        recentListings,
         totalUsers,
         activeUsers,
         totalStores,
