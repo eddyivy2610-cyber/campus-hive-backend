@@ -152,23 +152,26 @@ const participantUserSelect = {
   isEmailVerified: true,
   createdAt: true,
   campus: { select: { name: true } },
-  stores: { select: { id: true, name: true, logo: true, isVerified: true }, take: 1 },
+  stores: {
+    where: { status: "active" },
+    select: { id: true, name: true, description: true, logo: true, isVerified: true },
+    orderBy: { createdAt: "desc" as const },
+    take: 1,
+  },
 } as const;
 
 type SelectedUser = Prisma.UserGetPayload<{ select: typeof participantUserSelect }>;
 
 function buildParticipantProfile(user: SelectedUser) {
   const store = user.stores?.[0];
-  const isSeller = user.role === "SELLER";
+  const isSeller = Boolean(store) || user.role === "SELLER";
   return {
     id: user.id,
-    name: user.displayName || user.fullName || user.username || "Campus Member",
-    subtitle: user.campus?.name
-      ? `${isSeller ? "Student Store" : "Student"} · ${user.campus.name}`
-      : isSeller
-      ? "Student Store"
-      : "Campus Member",
-    avatar: user.profileImage || store?.logo || undefined,
+    name: store?.name || user.displayName || user.fullName || user.username || "Campus Member",
+    subtitle: store
+      ? store.description || user.campus?.name || "Campus Store"
+      : user.campus?.name || "Campus Member",
+    avatar: store?.logo || user.profileImage || undefined,
     isVerified: Boolean(user.isEmailVerified || store?.isVerified),
     accountType: (isSeller ? "student_store" : "student") as "student" | "student_store" | "approved_business",
     campusIdentityVerified: Boolean(user.isEmailVerified),

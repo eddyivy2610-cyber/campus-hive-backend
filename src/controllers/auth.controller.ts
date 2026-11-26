@@ -261,6 +261,7 @@ export async function getMe(req: AuthenticatedRequest, res: Response): Promise<v
                 fullName: true,
                 displayName: true,
                 profileImage: true,
+                campus: { select: { name: true } },
                 role: true,
                 isEmailVerified: true,
                 accountStatus: true,
@@ -294,6 +295,7 @@ export async function getMe(req: AuthenticatedRequest, res: Response): Promise<v
         const activeStores = (user.stores || []).map((s) => ({ ...s, _id: s.id }));
         const formatted = {
             ...formatAuthUser(user),
+            campus: user.campus?.name || null,
             stores: activeStores,
             store: activeStores[0] || null,
             storeId: activeStores[0]?.id || null,

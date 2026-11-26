@@ -66,11 +66,41 @@ router.patch("/users/profile", authenticate, async (req: AuthenticatedRequest, r
         : typeof req.body?.profileImage === "string"
         ? req.body.profileImage.trim()
         : undefined;
+    const rawCampus =
+      typeof req.body?.campus === "string"
+        ? req.body.campus.trim()
+        : typeof req.body?.location === "string"
+        ? req.body.location.trim()
+        : undefined;
+
+    let resolvedCampusId: string | undefined = undefined;
+    if (rawCampus) {
+      const existingCampus = await prisma.campus.findFirst({
+        where: { name: rawCampus },
+        select: { id: true },
+      });
+      if (existingCampus) {
+        resolvedCampusId = existingCampus.id;
+      } else {
+        const createdCampus = await prisma.campus.create({
+          data: {
+            name: rawCampus,
+            university: rawCampus,
+            location: rawCampus,
+            addedById: userId,
+          },
+          select: { id: true },
+        });
+        resolvedCampusId = createdCampus.id;
+      }
+    }
+
     const updated = await prisma.user.update({
       where: { id: userId },
       data: {
         ...(displayName ? { displayName, fullName: displayName } : {}),
         ...(avatar !== undefined ? { profileImage: avatar || null } : {}),
+        ...(resolvedCampusId ? { campusId: resolvedCampusId } : {}),
       },
       select: {
         id: true,
@@ -79,6 +109,7 @@ router.patch("/users/profile", authenticate, async (req: AuthenticatedRequest, r
         fullName: true,
         displayName: true,
         profileImage: true,
+        campus: { select: { name: true } },
         role: true,
         isEmailVerified: true,
         accountStatus: true,
@@ -86,6 +117,7 @@ router.patch("/users/profile", authenticate, async (req: AuthenticatedRequest, r
     });
     const formatted = {
       ...updated,
+      campus: updated.campus?.name || null,
       name: updated.displayName || updated.fullName || updated.username,
       emailVerified: Boolean(updated.isEmailVerified),
       onboardingStep: "profile_completed",
