@@ -13,7 +13,7 @@ const RADAR_USER_SELECT = {
   campus: { select: { name: true } },
   stores: {
     where: { status: "active" },
-    select: { logo: true },
+    select: { logo: true, slug: true },
     take: 1,
   },
 } as const;
@@ -22,6 +22,12 @@ function resolveUserAvatar(
   user?: { profileImage?: string | null; stores?: Array<{ logo?: string | null }> } | null
 ): string {
   return user?.profileImage || user?.stores?.[0]?.logo || "";
+}
+
+function resolveUserStoreSlug(
+  user?: { stores?: Array<{ slug?: string | null }> } | null
+): string | null {
+  return user?.stores?.[0]?.slug || null;
 }
 
 function formatTimeAgo(dateInput: Date | string): string {
@@ -84,6 +90,7 @@ export async function listRadarPosts(req: Request, res: Response): Promise<void>
         requesterHandle: owner?.username || "student",
         requesterLocation: p.location || owner?.campus?.name || p.campus || "Main Campus",
         requesterAvatar: resolveUserAvatar(owner),
+        requesterStoreSlug: resolveUserStoreSlug(owner),
         isVerified: Boolean(owner?.isEmailVerified),
         requestText: p.requestText,
         category: p.category || "all",
@@ -99,6 +106,7 @@ export async function listRadarPosts(req: Request, res: Response): Promise<void>
             authorHandle: r.authorHandle,
             authorDept: r.authorDept,
             authorAvatar: r.authorAvatar || resolveUserAvatar(replyAuthor),
+            authorStoreSlug: r.authorStoreSlug || resolveUserStoreSlug(replyAuthor),
             isVerified: Boolean(r.isVerified),
             message: r.message,
             authorTime: formatTimeAgo(r.createdAt || p.createdAt),
@@ -164,6 +172,7 @@ export async function createRadarPost(req: AuthenticatedRequest, res: Response):
       requesterHandle: user?.username || "student",
       requesterLocation: location,
       requesterAvatar: resolveUserAvatar(user),
+      requesterStoreSlug: resolveUserStoreSlug(user),
       isVerified: Boolean(user?.isEmailVerified),
       requestText: post.requestText,
       category: post.category,
@@ -256,6 +265,7 @@ export async function replyRadarPost(req: AuthenticatedRequest, res: Response): 
       authorHandle: user?.username || "member",
       authorDept: user?.campus?.name || "Main Campus",
       authorAvatar: resolveUserAvatar(user),
+      authorStoreSlug: resolveUserStoreSlug(user),
       isVerified: Boolean(user?.isEmailVerified),
       message,
       createdAt: new Date().toISOString(),

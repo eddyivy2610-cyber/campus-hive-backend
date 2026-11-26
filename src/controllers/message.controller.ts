@@ -155,7 +155,7 @@ const participantUserSelect = {
   campus: { select: { name: true } },
   stores: {
     where: { status: "active" },
-    select: { id: true, name: true, description: true, logo: true, isVerified: true },
+    select: { id: true, slug: true, name: true, description: true, logo: true, isVerified: true },
     orderBy: { createdAt: "desc" as const },
     take: 1,
   },
@@ -175,6 +175,8 @@ function buildParticipantProfile(user: SelectedUser) {
     avatar: store?.logo || user.profileImage || undefined,
     isVerified: Boolean(user.isEmailVerified || store?.isVerified),
     accountType: (isSeller ? "student_store" : "student") as "student" | "student_store" | "approved_business",
+    storeSlug: store?.slug || undefined,
+    hasStore: Boolean(store),
     campusIdentityVerified: Boolean(user.isEmailVerified),
     businessApproved: Boolean(store?.isVerified),
     memberSince: String(user.createdAt.getFullYear()),
