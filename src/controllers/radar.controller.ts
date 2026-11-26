@@ -3,6 +3,27 @@ import { Prisma } from "../generated/prisma/client.ts";
 import prisma from "../prisma.ts";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 
+const RADAR_USER_SELECT = {
+  id: true,
+  fullName: true,
+  displayName: true,
+  username: true,
+  profileImage: true,
+  isEmailVerified: true,
+  campus: { select: { name: true } },
+  stores: {
+    where: { status: "active" },
+    select: { logo: true },
+    take: 1,
+  },
+} as const;
+
+function resolveUserAvatar(
+  user?: { profileImage?: string | null; stores?: Array<{ logo?: string | null }> } | null
+): string {
+  return user?.profileImage || user?.stores?.[0]?.logo || "";
+}
+
 function formatTimeAgo(dateInput: Date | string): string {
   try {
     const d = new Date(dateInput);
@@ -37,19 +58,18 @@ export async function listRadarPosts(req: Request, res: Response): Promise<void>
       take: limit,
     });
 
-    const userIds = Array.from(new Set(posts.map((p) => p.userId)));
+    const replyUserIds = posts.flatMap((p) =>
+      Array.isArray(p.replies)
+        ? (p.replies as any[])
+            .map((r) => (typeof r?.userId === "string" ? r.userId : ""))
+            .filter(Boolean)
+        : []
+    );
+    const userIds = Array.from(new Set([...posts.map((p) => p.userId), ...replyUserIds]));
     const users = userIds.length
       ? await prisma.user.findMany({
           where: { id: { in: userIds } },
-          select: {
-            id: true,
-            fullName: true,
-            displayName: true,
-            username: true,
-            profileImage: true,
-            isEmailVerified: true,
-            campus: { select: { name: true } },
-          },
+          select: RADAR_USER_SELECT,
         })
       : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
@@ -63,24 +83,27 @@ export async function listRadarPosts(req: Request, res: Response): Promise<void>
         requesterName: owner?.displayName || owner?.fullName || owner?.username || "Campus Student",
         requesterHandle: owner?.username || "student",
         requesterLocation: p.location || owner?.campus?.name || p.campus || "Main Campus",
-        requesterAvatar: owner?.profileImage || "",
+        requesterAvatar: resolveUserAvatar(owner),
         isVerified: Boolean(owner?.isEmailVerified),
         requestText: p.requestText,
         category: p.category || "all",
         budget: p.budget || "",
         campus: p.campus || "Main Campus",
         timeAgo: formatTimeAgo(p.createdAt),
-        replies: rawReplies.map((r) => ({
-          id: r.id,
-          userId: r.userId,
-          authorName: r.authorName,
-          authorHandle: r.authorHandle,
-          authorDept: r.authorDept,
-          authorAvatar: r.authorAvatar || "",
-          isVerified: Boolean(r.isVerified),
-          message: r.message,
-          authorTime: formatTimeAgo(r.createdAt || p.createdAt),
-        })),
+        replies: rawReplies.map((r) => {
+          const replyAuthor = typeof r.userId === "string" ? userMap.get(r.userId) : undefined;
+          return {
+            id: r.id,
+            userId: r.userId,
+            authorName: r.authorName,
+            authorHandle: r.authorHandle,
+            authorDept: r.authorDept,
+            authorAvatar: r.authorAvatar || resolveUserAvatar(replyAuthor),
+            isVerified: Boolean(r.isVerified),
+            message: r.message,
+            authorTime: formatTimeAgo(r.createdAt || p.createdAt),
+          };
+        }),
       };
     });
 
@@ -107,15 +130,7 @@ export async function createRadarPost(req: AuthenticatedRequest, res: Response):
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        fullName: true,
-        displayName: true,
-        username: true,
-        profileImage: true,
-        isEmailVerified: true,
-        campus: { select: { name: true } },
-      },
+      select: RADAR_USER_SELECT,
     });
 
     const location =
@@ -148,7 +163,7 @@ export async function createRadarPost(req: AuthenticatedRequest, res: Response):
       requesterName: user?.displayName || user?.fullName || user?.username || "Campus Student",
       requesterHandle: user?.username || "student",
       requesterLocation: location,
-      requesterAvatar: user?.profileImage || "",
+      requesterAvatar: resolveUserAvatar(user),
       isVerified: Boolean(user?.isEmailVerified),
       requestText: post.requestText,
       category: post.category,
@@ -231,15 +246,7 @@ export async function replyRadarPost(req: AuthenticatedRequest, res: Response): 
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        fullName: true,
-        displayName: true,
-        username: true,
-        profileImage: true,
-        isEmailVerified: true,
-        campus: { select: { name: true } },
-      },
+      select: RADAR_USER_SELECT,
     });
 
     const newReply = {
@@ -248,7 +255,7 @@ export async function replyRadarPost(req: AuthenticatedRequest, res: Response): 
       authorName: user?.displayName || user?.fullName || user?.username || "Campus Member",
       authorHandle: user?.username || "member",
       authorDept: user?.campus?.name || "Main Campus",
-      authorAvatar: user?.profileImage || "",
+      authorAvatar: resolveUserAvatar(user),
       isVerified: Boolean(user?.isEmailVerified),
       message,
       createdAt: new Date().toISOString(),
