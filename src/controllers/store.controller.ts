@@ -71,6 +71,30 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
         : "student_id";
 
     const store = await prisma.$transaction(async (tx) => {
+      const [existingPendingApp, existingPendingStore] = await Promise.all([
+        tx.sellerApplication.findFirst({
+          where: {
+            userId,
+            status: { in: ["pending", "pending_review", "changes_requested"] },
+          },
+          select: { id: true },
+        }),
+        tx.store.findFirst({
+          where: {
+            ownerId: userId,
+            status: { in: ["pending_review", "pending"] },
+          },
+          select: { id: true },
+        }),
+      ]);
+
+      if (existingPendingApp || existingPendingStore) {
+        throw Object.assign(
+          new Error("You already have a store verification request pending admin review."),
+          { code: "PENDING_APPLICATION_EXISTS" }
+        );
+      }
+
       const updated = await tx.user.updateMany({
         where: {
           id: userId,
@@ -136,6 +160,13 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
 
     res.status(201).json({ success: true, data: store });
   } catch (err: any) {
+    if (err?.code === "PENDING_APPLICATION_EXISTS") {
+      res.status(409).json({
+        message: "You already have a store verification request pending admin review.",
+        error: "pending_application_exists",
+      });
+      return;
+    }
     if (err?.code === "STORE_CAP_EXCEEDED") {
       res.status(409).json({
         message: `Maximum of ${MAX_STORES_PER_USER} store(s) per user reached`,

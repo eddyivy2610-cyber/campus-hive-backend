@@ -702,9 +702,18 @@ export async function adminReviewBusinessApplication(req: AuthenticatedRequest, 
           });
         }
       } else if (action === "reject" && appDoc.storeId) {
-        await tx.store.update({
-          where: { id: appDoc.storeId },
-          data: { status: "rejected", suspensionReason: resolvedNote },
+        await tx.store.deleteMany({
+          where: {
+            id: appDoc.storeId,
+            status: { in: ["pending_review", "pending"] },
+          },
+        });
+        const remainingStores = await tx.store.count({
+          where: { ownerId: appDoc.userId },
+        });
+        await tx.user.update({
+          where: { id: appDoc.userId },
+          data: { storesCount: remainingStores },
         });
       }
       await tx.notification.create({
