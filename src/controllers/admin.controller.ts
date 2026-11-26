@@ -700,12 +700,52 @@ export async function adminReviewBusinessApplication(req: AuthenticatedRequest, 
             where: { id: appDoc.storeId },
             data: { status: "active", isVerified: true, verificationType: "student" },
           });
+        } else {
+          let parsedNotes: any = {};
+          if (appDoc.notes) {
+            try {
+              parsedNotes = JSON.parse(appDoc.notes);
+            } catch {}
+          }
+          const sp = parsedNotes?.storePayload || {};
+          const storeName = (sp.name || appDoc.businessName || "Campus Store").trim();
+          const rawSlug =
+            typeof sp.slug === "string" && sp.slug.trim()
+              ? sp.slug.trim()
+              : `${storeName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
+          const createdStore = await tx.store.create({
+            data: {
+              ownerId: appDoc.userId,
+              name: storeName,
+              slug: rawSlug,
+              slugLower: rawSlug.toLowerCase(),
+              status: "active",
+              isVerified: true,
+              description: sp.description ?? null,
+              category: sp.category ?? appDoc.category ?? null,
+              campus: sp.campus ?? appDoc.campus ?? null,
+              operatingLocation: sp.operatingLocation ?? appDoc.operatingLocation ?? null,
+              logo: sp.logo ?? null,
+              coverImage: sp.coverImage ?? null,
+              storeType: sp.storeType === "local_business" ? "local_business" : "student_store",
+              verificationType: sp.verificationType || "student_id",
+            },
+          });
+          await tx.sellerApplication.update({
+            where: { id },
+            data: { storeId: createdStore.id },
+          });
+          const totalStores = await tx.store.count({ where: { ownerId: appDoc.userId } });
+          await tx.user.update({
+            where: { id: appDoc.userId },
+            data: { storesCount: totalStores },
+          });
         }
       } else if (action === "reject" && appDoc.storeId) {
         await tx.store.deleteMany({
           where: {
             id: appDoc.storeId,
-            status: { in: ["pending_review", "pending"] },
+            status: { in: ["pending_review", "pending", "rejected"] },
           },
         });
         const remainingStores = await tx.store.count({

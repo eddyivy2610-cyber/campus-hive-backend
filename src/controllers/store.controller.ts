@@ -70,8 +70,8 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
         ? "location_proof"
         : "student_id";
 
-    const store = await prisma.$transaction(async (tx) => {
-      const [existingPendingApp, existingPendingStore] = await Promise.all([
+    const application = await prisma.$transaction(async (tx) => {
+      const [existingPendingApp, existingPendingStore, activeStoreCount] = await Promise.all([
         tx.sellerApplication.findFirst({
           where: {
             userId,
@@ -86,6 +86,12 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
           },
           select: { id: true },
         }),
+        tx.store.count({
+          where: {
+            ownerId: userId,
+            status: "active",
+          },
+        }),
       ]);
 
       if (existingPendingApp || existingPendingStore) {
@@ -95,44 +101,16 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
         );
       }
 
-      const updated = await tx.user.updateMany({
-        where: {
-          id: userId,
-          storesCount: { lt: MAX_STORES_PER_USER },
-        },
-        data: {
-          storesCount: { increment: 1 },
-          ...(typeof fullName === "string" && fullName.trim()
-            ? { fullName: fullName.trim(), displayName: fullName.trim() }
-            : {}),
-        },
-      });
-
-      if (updated.count === 0) {
+      if (activeStoreCount >= MAX_STORES_PER_USER) {
         throw Object.assign(new Error("Store cap reached"), { code: "STORE_CAP_EXCEEDED" });
       }
 
-      const createdStore = await tx.store.create({
-        data: {
-          ownerId: userId,
-          name: name.trim(),
-          slug: rawSlug,
-          slugLower,
-          status: "pending_review",
-          description: typeof description === "string" ? description : null,
-          category: typeof category === "string" ? category : null,
-          campus: typeof campus === "string" ? campus : null,
-          operatingLocation: typeof operatingLocation === "string" ? operatingLocation : null,
-          logo: typeof logo === "string" ? logo : null,
-          coverImage: typeof coverImage === "string" ? coverImage : null,
-          storeType: resolvedStoreType,
-          verificationType: resolvedVerificationType,
-        },
-        select: {
-          ...PUBLIC_STORE_SELECT,
-          ownerId: true,
-        },
-      });
+      if (typeof fullName === "string" && fullName.trim()) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { fullName: fullName.trim(), displayName: fullName.trim() },
+        });
+      }
 
       const docUrl =
         typeof studentIdImage === "string" && studentIdImage.trim()
@@ -141,24 +119,44 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
           ? locationProofDocument.trim()
           : null;
 
-      await tx.sellerApplication.create({
+      return tx.sellerApplication.create({
         data: {
           userId,
-          storeId: createdStore.id,
+          storeId: null,
           businessName: name.trim(),
           category: typeof category === "string" ? category : null,
           campus: typeof campus === "string" ? campus : null,
           operatingLocation: typeof operatingLocation === "string" ? operatingLocation : null,
           studentIdUrl: docUrl,
-          notes: contact && typeof contact === "object" ? JSON.stringify({ sellerType, contact }) : null,
+          notes: JSON.stringify({
+            sellerType: sellerType || "student",
+            contact: contact && typeof contact === "object" ? contact : undefined,
+            storePayload: {
+              name: name.trim(),
+              slug: rawSlug,
+              slugLower,
+              description: typeof description === "string" ? description : null,
+              category: typeof category === "string" ? category : null,
+              campus: typeof campus === "string" ? campus : null,
+              operatingLocation: typeof operatingLocation === "string" ? operatingLocation : null,
+              logo: typeof logo === "string" ? logo : null,
+              coverImage: typeof coverImage === "string" ? coverImage : null,
+              storeType: resolvedStoreType,
+              verificationType: resolvedVerificationType,
+            },
+          }),
           status: "pending",
         },
       });
-
-      return createdStore;
     });
 
-    res.status(201).json({ success: true, data: store });
+    res.status(201).json({
+      success: true,
+      data: {
+        application,
+        status: "pending_review",
+      },
+    });
   } catch (err: any) {
     if (err?.code === "PENDING_APPLICATION_EXISTS") {
       res.status(409).json({
@@ -211,18 +209,32 @@ export async function listMyStores(req: AuthenticatedRequest, res: Response): Pr
     const pendingStores = formatted.filter(
       (s) => s.status === "pending_review" || s.status === "pending"
     );
+    const pendingFromApp =
+      latestApplication &&
+      (latestApplication.status === "pending" || latestApplication.status === "pending_review")
+        ? {
+            id: latestApplication.id,
+            name: latestApplication.businessName,
+            category: latestApplication.category,
+            campus: latestApplication.campus,
+            operatingLocation: latestApplication.operatingLocation,
+            status: "pending_review",
+            createdAt: latestApplication.createdAt,
+          }
+        : null;
+
     res.status(200).json({
       success: true,
       data: {
         stores: formatted,
         activeStores,
         store: activeStores[0] || null,
-        pendingStore: pendingStores[0] || null,
+        pendingStore: pendingStores[0] || pendingFromApp,
         businessApplication: latestApplication || null,
         hasStore: activeStores.length > 0,
-        hasPendingApplication: pendingStores.length > 0,
+        hasPendingApplication: pendingStores.length > 0 || Boolean(pendingFromApp),
         maxStores: MAX_STORES_PER_USER,
-        canCreateMore: formatted.length < MAX_STORES_PER_USER,
+        canCreateMore: activeStores.length < MAX_STORES_PER_USER && !pendingFromApp,
       },
       stores: formatted,
     });
