@@ -661,7 +661,6 @@ export async function sendMessage(req: AuthenticatedRequest, res: Response): Pro
 
     void publishConversationEvent(convId, "new-message", {
       message: msgDto,
-      conversation: recipientConvDto,
     });
     void publishUserEvent(recipientId, "conversation-updated", {
       conversation: recipientConvDto,
@@ -760,7 +759,6 @@ export async function createOffer(req: AuthenticatedRequest, res: Response): Pro
     void publishConversationEvent(convId, "offer-updated", offer);
     void publishConversationEvent(convId, "new-message", {
       message: msgDto,
-      conversation: recipientConvDto,
     });
     void publishUserEvent(otherId, "conversation-updated", {
       conversation: recipientConvDto,
@@ -861,7 +859,6 @@ export async function createDeal(req: AuthenticatedRequest, res: Response): Prom
     void publishConversationEvent(convId, "deal-updated", deal);
     void publishConversationEvent(convId, "new-message", {
       message: msgDto,
-      conversation: recipientConvDto,
     });
     void publishUserEvent(otherId, "conversation-updated", {
       conversation: recipientConvDto,
@@ -1000,7 +997,6 @@ export async function updateDealCheckIn(req: AuthenticatedRequest, res: Response
     void publishConversationEvent(convId, "deal-updated", updatedDeal);
     void publishConversationEvent(convId, "new-message", {
       message: msgDto,
-      conversation: recipientConvDto,
     });
 
     res.status(200).json({

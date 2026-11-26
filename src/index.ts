@@ -77,8 +77,10 @@ app.use((req: Request, res: Response, next) => {
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === "test" ? 10000 : 100,
-  message: "Too many requests from this IP, please try again later.",
+  max: process.env.NODE_ENV === "test" ? 10000 : 1500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many requests from this IP, please try again later." },
 });
 app.use(limiter);
 
