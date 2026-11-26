@@ -413,3 +413,20 @@ model SellerApplication {
   @@index([status, createdAt(sort: Desc)])
   @@index([userId])
 }
+
+model RadarPost {
+  id          String   @id @default(cuid())
+  userId      String
+  requestText String
+  category    String   @default("all")
+  budget      String   @default("")
+  campus      String   @default("Main Campus")
+  location    String   @default("Main Campus")
+  status      String   @default("active")
+  replies     Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId])
+}

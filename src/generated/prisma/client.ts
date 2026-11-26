@@ -131,3 +131,8 @@ export type Report = Prisma.ReportModel
  * 
  */
 export type SellerApplication = Prisma.SellerApplicationModel
+/**
+ * Model RadarPost
+ * 
+ */
+export type RadarPost = Prisma.RadarPostModel

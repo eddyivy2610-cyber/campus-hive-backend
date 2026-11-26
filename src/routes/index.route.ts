@@ -10,6 +10,7 @@ import uploadRoute from "./upload.route.ts";
 import messageRoute from "./message.route.ts";
 import dashboardRoute from "./dashboard.route.ts";
 import realtimeRoute from "./realtime.route.ts";
+import radarRoute from "./radar.route.ts";
 import { authenticate, AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 import { getMe } from "../controllers/auth.controller.ts";
 import { listFollowing } from "../controllers/follow.controller.ts";
@@ -29,6 +30,7 @@ router.use("/upload", uploadRoute);
 router.use("/messages", messageRoute);
 router.use("/dashboard", dashboardRoute);
 router.use("/realtime", realtimeRoute);
+router.use("/radar", radarRoute);
 
 // Frontend (campushive) compatibility endpoints
 router.get("/users/profile", async (req, res, next) => {

@@ -14,11 +14,24 @@ export function resetEmailTransporterForTest(): void {
   transporter = undefined;
 }
 
+function getSmtpUser(): string {
+  return (
+    process.env.SMTP_USER?.trim() ||
+    process.env.EMAIL_FROM_ADDRESS?.trim() ||
+    fromAddress
+  );
+}
+
 function getEmailTransporter(): nodemailer.Transporter {
+  const port = Number(process.env.SMTP_PORT) || 587;
+  const secure = process.env.SMTP_SECURE === "true" || port === 465;
+  const pass = process.env.EMAIL_APP_PASSWORD?.trim() || process.env.SMTP_PASS?.trim();
+  const user = getSmtpUser();
+
   transporter ??= nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === "true",
+    host: process.env.SMTP_HOST?.trim() || "smtp.gmail.com",
+    port,
+    secure,
     family: 4,
     connectionTimeout: 10000,
     greetingTimeout: 10000,
@@ -26,10 +39,10 @@ function getEmailTransporter(): nodemailer.Transporter {
     tls: {
       rejectUnauthorized: false,
     },
-    auth: process.env.EMAIL_APP_PASSWORD
+    auth: pass
       ? {
-          user: fromAddress,
-          pass: process.env.EMAIL_APP_PASSWORD,
+          user,
+          pass,
         }
       : undefined,
   } as nodemailer.TransportOptions);
@@ -114,7 +127,7 @@ export const sendEmailService = async ({
     }
 
     await getEmailTransporter().sendMail({
-      from: `"CampusHive" <${fromAddress}>`,
+      from: `"CampusHive" <${getSmtpUser()}>`,
       to,
       subject: title,
       text,

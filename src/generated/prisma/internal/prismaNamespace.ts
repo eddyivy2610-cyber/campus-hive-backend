@@ -414,7 +414,8 @@ export const ModelName = {
   Banner: 'Banner',
   AdminLog: 'AdminLog',
   Report: 'Report',
-  SellerApplication: 'SellerApplication'
+  SellerApplication: 'SellerApplication',
+  RadarPost: 'RadarPost'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -430,7 +431,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "verificationToken" | "campus" | "session" | "refreshToken" | "store" | "listing" | "follow" | "order" | "review" | "conversation" | "message" | "userPreference" | "notification" | "banner" | "adminLog" | "report" | "sellerApplication"
+    modelProps: "user" | "verificationToken" | "campus" | "session" | "refreshToken" | "store" | "listing" | "follow" | "order" | "review" | "conversation" | "message" | "userPreference" | "notification" | "banner" | "adminLog" | "report" | "sellerApplication" | "radarPost"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1766,6 +1767,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    RadarPost: {
+      payload: Prisma.$RadarPostPayload<ExtArgs>
+      fields: Prisma.RadarPostFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.RadarPostFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.RadarPostFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload>
+        }
+        findFirst: {
+          args: Prisma.RadarPostFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.RadarPostFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload>
+        }
+        findMany: {
+          args: Prisma.RadarPostFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload>[]
+        }
+        create: {
+          args: Prisma.RadarPostCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload>
+        }
+        createMany: {
+          args: Prisma.RadarPostCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.RadarPostCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload>[]
+        }
+        delete: {
+          args: Prisma.RadarPostDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload>
+        }
+        update: {
+          args: Prisma.RadarPostUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload>
+        }
+        deleteMany: {
+          args: Prisma.RadarPostDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.RadarPostUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.RadarPostUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload>[]
+        }
+        upsert: {
+          args: Prisma.RadarPostUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RadarPostPayload>
+        }
+        aggregate: {
+          args: Prisma.RadarPostAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateRadarPost>
+        }
+        groupBy: {
+          args: Prisma.RadarPostGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.RadarPostGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.RadarPostCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.RadarPostCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -2118,6 +2193,23 @@ export const SellerApplicationScalarFieldEnum = {
 export type SellerApplicationScalarFieldEnum = (typeof SellerApplicationScalarFieldEnum)[keyof typeof SellerApplicationScalarFieldEnum]
 
 
+export const RadarPostScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  requestText: 'requestText',
+  category: 'category',
+  budget: 'budget',
+  campus: 'campus',
+  location: 'location',
+  status: 'status',
+  replies: 'replies',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type RadarPostScalarFieldEnum = (typeof RadarPostScalarFieldEnum)[keyof typeof RadarPostScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -2132,6 +2224,13 @@ export const NullableJsonNullValueInput = {
 } as const
 
 export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
+
+
+export const JsonNullValueInput = {
+  JsonNull: JsonNull
+} as const
+
+export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
 
 
 export const QueryMode = {
@@ -2522,6 +2621,7 @@ export type GlobalOmitConfig = {
   adminLog?: Prisma.AdminLogOmit
   report?: Prisma.ReportOmit
   sellerApplication?: Prisma.SellerApplicationOmit
+  radarPost?: Prisma.RadarPostOmit
 }
 
 /* Types for Logging */
