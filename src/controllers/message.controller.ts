@@ -148,6 +148,7 @@ const participantUserSelect = {
   displayName: true,
   username: true,
   profileImage: true,
+  bio: true,
   role: true,
   isEmailVerified: true,
   createdAt: true,
@@ -170,7 +171,7 @@ function buildParticipantProfile(user: SelectedUser) {
     name: store?.name || user.displayName || user.fullName || user.username || "Campus Member",
     subtitle: store
       ? store.description || user.campus?.name || "Campus Store"
-      : user.campus?.name || "Campus Member",
+      : user.bio || user.campus?.name || "Campus Member",
     avatar: store?.logo || user.profileImage || undefined,
     isVerified: Boolean(user.isEmailVerified || store?.isVerified),
     accountType: (isSeller ? "student_store" : "student") as "student" | "student_store" | "approved_business",
