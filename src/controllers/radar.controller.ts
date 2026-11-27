@@ -13,10 +13,13 @@ const RADAR_USER_SELECT = {
   campus: { select: { name: true } },
   stores: {
     where: { status: "active" },
-    select: { logo: true, slug: true },
+    select: { name: true, logo: true, slug: true, campus: true, isVerified: true },
+    orderBy: { createdAt: "desc" as const },
     take: 1,
   },
 } as const;
+
+type RadarSelectedUser = Prisma.UserGetPayload<{ select: typeof RADAR_USER_SELECT }>;
 
 function resolveUserAvatar(
   user?: { profileImage?: string | null; stores?: Array<{ logo?: string | null }> } | null
@@ -28,6 +31,32 @@ function resolveUserStoreSlug(
   user?: { stores?: Array<{ slug?: string | null }> } | null
 ): string | null {
   return user?.stores?.[0]?.slug || null;
+}
+
+/**
+ * Resolves a reply author's display identity: when the replier owns an active store,
+ * always present their Store profile (name, logo, slug, verification) — matching Messaging.
+ */
+function resolveReplyAuthorIdentity(user?: RadarSelectedUser | null) {
+  const store = user?.stores?.[0];
+  if (store) {
+    return {
+      authorName: store.name,
+      authorHandle: store.slug || user?.username || "store",
+      authorDept: store.campus || user?.campus?.name || "Campus Store",
+      authorAvatar: store.logo || user?.profileImage || "",
+      authorStoreSlug: store.slug || null,
+      isVerified: Boolean(store.isVerified || user?.isEmailVerified),
+    };
+  }
+  return {
+    authorName: user?.displayName || user?.fullName || user?.username || "Campus Member",
+    authorHandle: user?.username || "member",
+    authorDept: user?.campus?.name || "Main Campus",
+    authorAvatar: user?.profileImage || "",
+    authorStoreSlug: null,
+    isVerified: Boolean(user?.isEmailVerified),
+  };
 }
 
 // Abuse limits for Campus Radar
@@ -111,17 +140,31 @@ export async function listRadarPosts(req: Request, res: Response): Promise<void>
         timeAgo: formatTimeAgo(p.createdAt),
         replies: rawReplies.map((r) => {
           const replyAuthor = typeof r.userId === "string" ? userMap.get(r.userId) : undefined;
+          const hydrated = replyAuthor ? resolveReplyAuthorIdentity(replyAuthor) : null;
+          const parentReply =
+            typeof r.parentReplyId === "string" && r.parentReplyId
+              ? rawReplies.find((cand) => cand?.id === r.parentReplyId)
+              : null;
+          const parentAuthor =
+            parentReply && typeof parentReply.userId === "string"
+              ? userMap.get(parentReply.userId)
+              : undefined;
+          const parentIdentity = parentAuthor ? resolveReplyAuthorIdentity(parentAuthor) : null;
+
           return {
             id: r.id,
             userId: r.userId,
-            authorName: r.authorName,
-            authorHandle: r.authorHandle,
-            authorDept: r.authorDept,
-            authorAvatar: r.authorAvatar || resolveUserAvatar(replyAuthor),
-            authorStoreSlug: r.authorStoreSlug || resolveUserStoreSlug(replyAuthor),
+            authorName: hydrated?.authorName || r.authorName,
+            authorHandle: hydrated?.authorHandle || r.authorHandle,
+            authorDept: hydrated?.authorDept || r.authorDept,
+            authorAvatar: hydrated?.authorAvatar || r.authorAvatar || "",
+            authorStoreSlug: hydrated ? hydrated.authorStoreSlug : r.authorStoreSlug || null,
             parentReplyId: typeof r.parentReplyId === "string" && r.parentReplyId ? r.parentReplyId : null,
-            replyToName: typeof r.replyToName === "string" && r.replyToName ? r.replyToName : null,
-            isVerified: Boolean(r.isVerified),
+            replyToName:
+              (typeof r.replyToName === "string" && r.replyToName) ||
+              parentIdentity?.authorName ||
+              null,
+            isVerified: hydrated ? hydrated.isVerified : Boolean(r.isVerified),
             message: r.message,
             authorTime: formatTimeAgo(r.createdAt || p.createdAt),
           };
@@ -226,11 +269,21 @@ export async function getRadarPost(req: Request, res: Response): Promise<void> {
       res.status(404).json({ success: false, error: "Radar post not found." });
       return;
     }
-    const owner = await prisma.user.findUnique({
-      where: { id: post.userId },
-      select: RADAR_USER_SELECT,
-    });
     const rawReplies = Array.isArray(post.replies) ? (post.replies as any[]) : [];
+    const singlePostUserIds = Array.from(
+      new Set([
+        post.userId,
+        ...rawReplies.map((r) => (typeof r?.userId === "string" ? r.userId : "")).filter(Boolean),
+      ])
+    );
+    const singlePostUsers = singlePostUserIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: singlePostUserIds } },
+          select: RADAR_USER_SELECT,
+        })
+      : [];
+    const singleUserMap = new Map(singlePostUsers.map((u) => [u.id, u]));
+    const owner = singleUserMap.get(post.userId);
     res.status(200).json({
       success: true,
       data: {
@@ -246,19 +299,23 @@ export async function getRadarPost(req: Request, res: Response): Promise<void> {
         budget: post.budget || "",
         campus: post.campus || "Main Campus",
         timeAgo: formatTimeAgo(post.createdAt),
-        replies: rawReplies.map((r) => ({
-          id: r.id,
-          authorName: r.authorName,
-          authorHandle: r.authorHandle,
-          authorDept: r.authorDept,
-          authorAvatar: r.authorAvatar || "",
-          authorStoreSlug: r.authorStoreSlug || null,
-          parentReplyId: typeof r.parentReplyId === "string" && r.parentReplyId ? r.parentReplyId : null,
-          replyToName: typeof r.replyToName === "string" && r.replyToName ? r.replyToName : null,
-          isVerified: Boolean(r.isVerified),
-          message: r.message,
-          authorTime: formatTimeAgo(r.createdAt || post.createdAt),
-        })),
+        replies: rawReplies.map((r) => {
+          const replyAuthor = typeof r.userId === "string" ? singleUserMap.get(r.userId) : undefined;
+          const hydrated = replyAuthor ? resolveReplyAuthorIdentity(replyAuthor) : null;
+          return {
+            id: r.id,
+            authorName: hydrated?.authorName || r.authorName,
+            authorHandle: hydrated?.authorHandle || r.authorHandle,
+            authorDept: hydrated?.authorDept || r.authorDept,
+            authorAvatar: hydrated?.authorAvatar || r.authorAvatar || "",
+            authorStoreSlug: hydrated ? hydrated.authorStoreSlug : r.authorStoreSlug || null,
+            parentReplyId: typeof r.parentReplyId === "string" && r.parentReplyId ? r.parentReplyId : null,
+            replyToName: typeof r.replyToName === "string" && r.replyToName ? r.replyToName : null,
+            isVerified: hydrated ? hydrated.isVerified : Boolean(r.isVerified),
+            message: r.message,
+            authorTime: formatTimeAgo(r.createdAt || post.createdAt),
+          };
+        }),
       },
     });
   } catch (err) {
@@ -351,28 +408,37 @@ export async function replyRadarPost(req: AuthenticatedRequest, res: Response): 
         typeof targetReply.parentReplyId === "string" && targetReply.parentReplyId
           ? targetReply.parentReplyId
           : String(targetReply.id);
-      resolvedReplyToName =
-        typeof targetReply.authorName === "string" && targetReply.authorName
-          ? targetReply.authorName
-          : null;
+      if (typeof targetReply.userId === "string" && targetReply.userId) {
+        const targetOwner = await prisma.user.findUnique({
+          where: { id: targetReply.userId },
+          select: RADAR_USER_SELECT,
+        });
+        resolvedReplyToName = resolveReplyAuthorIdentity(targetOwner).authorName;
+      } else {
+        resolvedReplyToName =
+          typeof targetReply.authorName === "string" && targetReply.authorName
+            ? targetReply.authorName
+            : null;
+      }
     }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: RADAR_USER_SELECT,
     });
+    const authorIdentity = resolveReplyAuthorIdentity(user);
 
     const newReply = {
       id: `rep-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       userId,
-      authorName: user?.displayName || user?.fullName || user?.username || "Campus Member",
-      authorHandle: user?.username || "member",
-      authorDept: user?.campus?.name || "Main Campus",
-      authorAvatar: resolveUserAvatar(user),
-      authorStoreSlug: resolveUserStoreSlug(user),
+      authorName: authorIdentity.authorName,
+      authorHandle: authorIdentity.authorHandle,
+      authorDept: authorIdentity.authorDept,
+      authorAvatar: authorIdentity.authorAvatar,
+      authorStoreSlug: authorIdentity.authorStoreSlug,
       parentReplyId: resolvedParentReplyId,
       replyToName: resolvedReplyToName,
-      isVerified: Boolean(user?.isEmailVerified),
+      isVerified: authorIdentity.isVerified,
       message,
       createdAt: new Date().toISOString(),
     };
