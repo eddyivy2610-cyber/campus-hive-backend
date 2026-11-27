@@ -338,6 +338,49 @@ export async function createConversation(req: AuthenticatedRequest, res: Respons
   }
 }
 
+/**
+ * Resolve a chat participant's public identity on the server.
+ * Accepts a user ID, store ID, or store slug. Used to render draft chats so the
+ * client never trusts names, avatars, or verified badges passed through URLs.
+ */
+export async function getParticipantProfile(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized", error: "unauthorized" });
+      return;
+    }
+
+    const ref = String(req.params.id || "").trim();
+    if (!ref || ref.length > 120) {
+      res.status(400).json({ message: "Valid participant reference is required", error: "bad_request" });
+      return;
+    }
+
+    let targetUserId = ref;
+    const store = await prisma.store.findFirst({
+      where: { OR: [{ id: ref }, { slugLower: ref.toLowerCase() }], status: "active" },
+      select: { ownerId: true },
+    });
+    if (store?.ownerId) targetUserId = store.ownerId;
+
+    const target = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: participantUserSelect,
+    });
+    if (!target) {
+      res.status(404).json({ message: "Participant not found", error: "not_found" });
+      return;
+    }
+
+    res.setHeader("Cache-Control", "private, no-store");
+    res.status(200).json({ success: true, data: buildParticipantProfile(target) });
+  } catch (err) {
+    console.error("Get participant profile error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 export async function getConversationMessages(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const userId = req.auth?.userId;

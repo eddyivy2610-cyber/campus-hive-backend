@@ -70,6 +70,21 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
         ? "location_proof"
         : "student_id";
 
+    const { parseSafetyLocationPayload, recordConfidentialSafetyLocation } = await import(
+      "../lib/campuses.ts"
+    );
+    const parsedSafetyLoc = parseSafetyLocationPayload(
+      req.body?.safetyLocation,
+      "seller_registration"
+    );
+    if (sellerType && !parsedSafetyLoc && process.env.NODE_ENV !== "test") {
+      res.status(400).json({
+        message: "Location access is required to register as a seller for community safety.",
+        error: "seller_location_required",
+      });
+      return;
+    }
+
     const application = await prisma.$transaction(async (tx) => {
       const [existingPendingApp, existingPendingStore, activeStoreCount] = await Promise.all([
         tx.sellerApplication.findFirst({
@@ -131,6 +146,7 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
           notes: JSON.stringify({
             sellerType: sellerType || "student",
             contact: contact && typeof contact === "object" ? contact : undefined,
+            ...(parsedSafetyLoc ? { safetyLocation: parsedSafetyLoc } : {}),
             storePayload: {
               name: name.trim(),
               slug: rawSlug,
@@ -140,7 +156,8 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
               campus: typeof campus === "string" ? campus : null,
               operatingLocation: typeof operatingLocation === "string" ? operatingLocation : null,
               logo: typeof logo === "string" ? logo : null,
-              coverImage: typeof coverImage === "string" ? coverImage : null,
+              // Cover photo is never part of onboarding; always starts empty until set in Profile Settings
+              coverImage: null,
               storeType: resolvedStoreType,
               verificationType: resolvedVerificationType,
             },
@@ -149,6 +166,14 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
         },
       });
     });
+
+    if (parsedSafetyLoc) {
+      await recordConfidentialSafetyLocation(
+        userId,
+        req.body?.safetyLocation,
+        "seller_registration"
+      );
+    }
 
     res.status(201).json({
       success: true,
@@ -323,7 +348,7 @@ export async function updateStore(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const { name, description, category, campus, operatingLocation } = req.body || {};
+    const { name, description, category, campus, operatingLocation, logo, coverImage } = req.body || {};
     const updated = await prisma.store.update({
       where: { id: storeId },
       data: {
@@ -332,6 +357,12 @@ export async function updateStore(req: AuthenticatedRequest, res: Response): Pro
         ...(typeof category === "string" ? { category } : {}),
         ...(typeof campus === "string" ? { campus } : {}),
         ...(typeof operatingLocation === "string" ? { operatingLocation } : {}),
+        ...(typeof logo === "string" ? { logo: logo.trim() || null } : {}),
+        ...(typeof coverImage === "string"
+          ? { coverImage: coverImage.trim() || null }
+          : coverImage === null
+          ? { coverImage: null }
+          : {}),
       },
       select: {
         ...PUBLIC_STORE_SELECT,

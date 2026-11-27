@@ -32,6 +32,33 @@ router.use("/dashboard", dashboardRoute);
 router.use("/realtime", realtimeRoute);
 router.use("/radar", radarRoute);
 
+router.get("/campuses", async (_req, res) => {
+  const { CAMPUS_COLLECTION } = await import("../lib/campuses.ts");
+  try {
+    const dbCampuses = await prisma.campus.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, university: true, location: true },
+    });
+    const knownNames = new Set(CAMPUS_COLLECTION.map((c) => c.name.toLowerCase()));
+    const extra = dbCampuses
+      .filter((c) => !knownNames.has(c.name.toLowerCase()))
+      .map((c) => ({
+        id: c.id,
+        slug: c.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+        name: c.name,
+        shortName: c.name.split("(")[0].trim(),
+        university: c.university,
+        city: c.location,
+        state: "",
+        lat: Number.NaN,
+        lng: Number.NaN,
+      }));
+    res.status(200).json({ success: true, data: [...CAMPUS_COLLECTION, ...extra] });
+  } catch {
+    res.status(200).json({ success: true, data: CAMPUS_COLLECTION });
+  }
+});
+
 // Frontend (campushive) compatibility endpoints
 router.get("/users/profile", async (req, res, next) => {
   const rawHandle = typeof req.query.handle === "string" ? req.query.handle.trim().replace(/^@/, "").toLowerCase() : "";
@@ -56,12 +83,22 @@ router.patch("/users/profile", authenticate, async (req: AuthenticatedRequest, r
       res.status(401).json({ message: "Unauthorized", error: "unauthorized" });
       return;
     }
-    const displayName =
+    const rawDisplayName =
       typeof req.body?.displayName === "string"
-        ? req.body.displayName.trim()
+        ? req.body.displayName
         : typeof req.body?.name === "string"
-        ? req.body.name.trim()
+        ? req.body.name
         : undefined;
+    let displayName: string | undefined = undefined;
+    if (rawDisplayName !== undefined) {
+      const { validateDisplayName } = await import("../lib/nameValidation.ts");
+      const nameCheck = validateDisplayName(rawDisplayName);
+      if (!nameCheck.valid) {
+        res.status(400).json({ success: false, message: nameCheck.error || "Invalid display name." });
+        return;
+      }
+      displayName = nameCheck.normalized;
+    }
     const avatar =
       typeof req.body?.avatar === "string"
         ? req.body.avatar.trim()
@@ -97,10 +134,44 @@ router.patch("/users/profile", authenticate, async (req: AuthenticatedRequest, r
       }
     }
 
+    const bio =
+      typeof req.body?.bio === "string"
+        ? req.body.bio.trim().slice(0, 500)
+        : undefined;
+    const rawCoverImage = req.body?.coverImage;
+
+    // Cover photo updates are strictly restricted to active storefront owners
+    if (rawCoverImage !== undefined) {
+      const ownedActiveStore = await prisma.store.findFirst({
+        where: { ownerId: userId, status: "active" },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+      if (!ownedActiveStore) {
+        if (typeof rawCoverImage === "string" && rawCoverImage.trim() !== "") {
+          res.status(403).json({
+            success: false,
+            message: "Cover photo is only available to storefront owners.",
+          });
+          return;
+        }
+      } else {
+        const nextCover =
+          typeof rawCoverImage === "string" && rawCoverImage.trim()
+            ? rawCoverImage.trim()
+            : null;
+        await prisma.store.update({
+          where: { id: ownedActiveStore.id },
+          data: { coverImage: nextCover },
+        });
+      }
+    }
+
     const updated = await prisma.user.update({
       where: { id: userId },
       data: {
         ...(displayName ? { displayName, fullName: displayName } : {}),
+        ...(bio !== undefined ? { bio } : {}),
         ...(avatar !== undefined ? { profileImage: avatar || null } : {}),
         ...(resolvedCampusId ? { campusId: resolvedCampusId } : {}),
       },
@@ -110,22 +181,40 @@ router.patch("/users/profile", authenticate, async (req: AuthenticatedRequest, r
         username: true,
         fullName: true,
         displayName: true,
+        bio: true,
         profileImage: true,
         campus: { select: { name: true } },
         role: true,
         isEmailVerified: true,
         accountStatus: true,
+        stores: {
+          where: { status: "active" },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            logo: true,
+            coverImage: true,
+            status: true,
+          },
+        },
       },
     });
+    const activeStores = (updated.stores || []).map((s) => ({ ...s, _id: s.id }));
     const formatted = {
       ...updated,
       campus: updated.campus?.name || null,
       name: updated.displayName || updated.fullName || updated.username,
       emailVerified: Boolean(updated.isEmailVerified),
       onboardingStep: "profile_completed",
+      stores: activeStores,
+      store: activeStores[0] || null,
+      storeId: activeStores[0]?.id || null,
       profile: {
         displayName: updated.displayName || updated.fullName || updated.username,
         handle: updated.username,
+        bio: updated.bio || "",
         avatar: updated.profileImage || null,
       },
     };
@@ -137,12 +226,13 @@ router.patch("/users/profile", authenticate, async (req: AuthenticatedRequest, r
   }
 });
 router.get("/users/check-username", async (req, res) => {
-  const username = String(req.query.username || "").trim().toLowerCase();
-  if (!username) {
-    res.status(400).json({ available: false, message: "username is required" });
+  const { validateUsernameCandidate } = await import("../lib/nameValidation.ts");
+  const check = validateUsernameCandidate(req.query.username);
+  if (!check.valid) {
+    res.status(200).json({ success: true, available: false, message: check.error });
     return;
   }
-  const existing = await prisma.user.findUnique({ where: { username }, select: { id: true } });
+  const existing = await prisma.user.findUnique({ where: { username: check.normalized }, select: { id: true } });
   res.status(200).json({ success: true, available: !existing });
 });
 router.get("/users/preferences", authenticate, async (req: AuthenticatedRequest, res) => {
@@ -252,11 +342,16 @@ router.patch("/notifications/read-all", authenticate, async (req: AuthenticatedR
       res.status(401).json({ message: "Unauthorized" });
       return;
     }
+    // Optional `ids` limits marking to the notifications currently on screen
+    const ids = Array.isArray(req.body?.ids)
+      ? (req.body.ids as unknown[]).filter((v): v is string => typeof v === "string" && v.length > 0 && v.length <= 64).slice(0, 100)
+      : null;
     await prisma.notification.updateMany({
-      where: { userId, isRead: false },
+      where: { userId, isRead: false, ...(ids ? { id: { in: ids } } : {}) },
       data: { isRead: true, readAt: new Date() },
     });
-    res.status(200).json({ success: true, unreadCount: 0 });
+    const unreadCount = await prisma.notification.count({ where: { userId, isRead: false } });
+    res.status(200).json({ success: true, unreadCount });
   } catch (err) {
     console.error("[PATCH /notifications/read-all] Error:", err);
     res.status(500).json({ message: "Failed to mark notifications as read" });
@@ -293,10 +388,18 @@ router.post("/reports", authenticate, async (req: AuthenticatedRequest, res) => 
       res.status(401).json({ success: false, message: "Unauthorized" });
       return;
     }
+    const ALLOWED_TARGET_TYPES = ["listing", "store", "user", "radar", "review"];
+    const ALLOWED_REASONS = ["misleading", "counterfeit", "harassment", "prohibited_item", "scam", "spam", "other"];
     const rawType = String(req.body?.targetType || req.body?.reportType || "listing").toLowerCase();
-    const targetType = rawType === "profile" ? "store" : rawType;
-    const targetId = String(req.body?.targetId || "").trim();
-    const reason = String(req.body?.reason || "other").trim().toLowerCase();
+    const normalizedType = rawType === "profile" ? "store" : rawType;
+    if (!ALLOWED_TARGET_TYPES.includes(normalizedType)) {
+      res.status(400).json({ success: false, message: "Invalid report target type." });
+      return;
+    }
+    const targetType = normalizedType;
+    const targetId = String(req.body?.targetId || "").trim().slice(0, 120);
+    const rawReason = String(req.body?.reason || "other").trim().toLowerCase();
+    const reason = ALLOWED_REASONS.includes(rawReason) ? rawReason : "other";
     const details = typeof req.body?.details === "string" ? req.body.details.trim().slice(0, 1000) : "";
 
     if (!targetId) {

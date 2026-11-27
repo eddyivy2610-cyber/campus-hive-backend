@@ -6,6 +6,8 @@ import prisma from "../prisma.ts";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 import { toPublicListing, toPublicStore } from "../lib/serializers.ts";
 import { generateAccessToken } from "../services/token.service.ts";
+import { getDummyPasswordHash, validatePasswordPolicy, verifyPassword } from "../lib/password.ts";
+import { validateEmail } from "../lib/email.ts";
 
 async function writeAdminLog(params: {
   adminId: string;
@@ -52,28 +54,20 @@ export async function adminSignIn(req: AuthenticatedRequest, res: Response): Pro
     });
 
     if (!user) {
+      const dummyHash = await getDummyPasswordHash();
+      await verifyPassword(password, dummyHash).catch(() => false);
+      res.status(401).json({ success: false, message: "Invalid admin credentials." });
+      return;
+    }
+
+    const validPassword = await verifyPassword(password, user.passwordHash).catch(() => false);
+    if (!validPassword) {
       res.status(401).json({ success: false, message: "Invalid admin credentials." });
       return;
     }
 
     if (user.accountStatus === "SUSPENDED" || user.accountStatus === "BANNED") {
       res.status(403).json({ success: false, message: "This administrator account is disabled." });
-      return;
-    }
-
-    let validPassword = false;
-    try {
-      if (user.passwordHash.startsWith("$2")) {
-        validPassword = await bcrypt.compare(password, user.passwordHash);
-      } else {
-        validPassword = await argon2.verify(user.passwordHash, password);
-      }
-    } catch {
-      validPassword = false;
-    }
-
-    if (!validPassword) {
-      res.status(401).json({ success: false, message: "Invalid admin credentials." });
       return;
     }
 
@@ -90,7 +84,7 @@ export async function adminSignIn(req: AuthenticatedRequest, res: Response): Pro
     res.cookie("accessToken", token, {
       httpOnly: true,
       secure: isProd,
-      sameSite: isProd ? "none" : "lax",
+      sameSite: "lax",
       maxAge: 15 * 60 * 1000,
     });
 
@@ -131,18 +125,20 @@ export async function adminSignUp(req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const keysMatch =
-      providedKey.length === configuredKey.length &&
-      crypto.timingSafeEqual(Buffer.from(providedKey), Buffer.from(configuredKey));
+    // Compare fixed-length SHA-256 digests so timing never leaks ADMIN_REGISTRATION_KEY length
+    const providedDigest = crypto.createHash("sha256").update(providedKey).digest();
+    const configuredDigest = crypto.createHash("sha256").update(configuredKey).digest();
+    const keysMatch = providedKey.length > 0 && crypto.timingSafeEqual(providedDigest, configuredDigest);
     if (!keysMatch) {
       res.status(403).json({ success: false, message: "Invalid administrator registration key." });
       return;
     }
 
-    if (!email || !email.includes("@") || !username || password.length < 8) {
+    const pwCheck = validatePasswordPolicy(password);
+    if (!validateEmail(email) || !/^[a-z][a-z0-9_]{2,23}$/.test(username) || !pwCheck.valid) {
       res.status(400).json({
         success: false,
-        message: "Valid email, username, and password (min 8 characters) are required.",
+        message: pwCheck.error || "Valid email, username (3–24 lowercase alphanumeric/underscore), and strong password are required.",
       });
       return;
     }
@@ -412,9 +408,60 @@ export async function adminListUsers(req: AuthenticatedRequest, res: Response): 
         isEmailVerified: true,
         storesCount: true,
         createdAt: true,
+        campus: { select: { name: true } },
+        sessions: {
+          where: { lastKnownLat: { not: null }, lastKnownLong: { not: null } },
+          orderBy: { latLongUpdatedAt: "desc" },
+          take: 1,
+          select: { lastKnownLat: true, lastKnownLong: true, latLongUpdatedAt: true },
+        },
       },
     });
-    res.status(200).json({ success: true, data: users });
+
+    const userIds = users.map((u) => u.id);
+    const safetyLogs = userIds.length
+      ? await prisma.adminLog.findMany({
+          where: {
+            action: "USER_SAFETY_LOCATION_CAPTURED",
+            targetType: "user",
+            targetId: { in: userIds },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { targetId: true, details: true, createdAt: true },
+        })
+      : [];
+
+    const latestSafetyByUser = new Map<string, any>();
+    for (const log of safetyLogs) {
+      if (!latestSafetyByUser.has(log.targetId) && log.details && typeof log.details === "object") {
+        latestSafetyByUser.set(log.targetId, log.details);
+      }
+    }
+
+    const enriched = users.map((u) => {
+      const fromLog = latestSafetyByUser.get(u.id);
+      const fromSession = u.sessions?.[0];
+      const safetyLocation =
+        fromLog ||
+        (fromSession && fromSession.lastKnownLat !== null && fromSession.lastKnownLong !== null
+          ? {
+              lat: fromSession.lastKnownLat,
+              lng: fromSession.lastKnownLong,
+              accuracyMeters: null,
+              source: "session",
+              capturedAt: fromSession.latLongUpdatedAt?.toISOString() || null,
+            }
+          : null);
+      const { sessions: _sessions, campus: campusObj, ...rest } = u;
+      return {
+        ...rest,
+        _id: u.id,
+        campus: campusObj?.name || null,
+        safetyLocation,
+      };
+    });
+
+    res.status(200).json({ success: true, data: enriched });
   } catch (err) {
     console.error("[adminListUsers] Error:", err);
     res.status(500).json({ success: false, message: "Internal server error" });

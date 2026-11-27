@@ -72,7 +72,21 @@ async function main() {
       body: { email: "user@example.test" },
     });
     assert.equal(loginFailOpen.nextCalled, true);
-    console.log("[PASS] loginRateLimiter fails open when Redis unavailable in production");
+
+    let blockedOnFallback = false;
+    for (let i = 0; i < 20; i++) {
+      const attempt = await callMw(loginRateLimiter, {
+        headers: {},
+        ip: "203.0.113.5",
+        body: { email: "user@example.test" },
+      });
+      if (attempt.status === 429) {
+        blockedOnFallback = true;
+        break;
+      }
+    }
+    assert.equal(blockedOnFallback, true, "Expected local fallback limiter to block excess login attempts");
+    console.log("[PASS] loginRateLimiter degrades to local rate limit when Redis unavailable in production");
   } finally {
     process.env.NODE_ENV = origEnv;
     if (origUrl !== undefined) process.env.UPSTASH_REDIS_REST_URL = origUrl;

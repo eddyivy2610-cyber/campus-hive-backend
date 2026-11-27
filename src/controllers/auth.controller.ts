@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "../prisma.ts";
-import { hashPassword } from "../lib/password.ts";
+import { hashPassword, validatePasswordPolicy } from "../lib/password.ts";
 import { generateAccessToken, generateOpaqueRefreshToken, hashRefreshToken } from "../services/token.service.ts";
 import { setSessionCookies } from "../services/session.service.ts";
 import jwt from "jsonwebtoken";
@@ -15,8 +15,9 @@ export async function processVerificationForForgetPassword(req: Request, res: Re
             res.status(400).json({ message: "Invalid verification token", error:"bad token" });
             return;
         }
-        if (!newPassword) {
-            res.status(400).json({ message: "Invalid password", error:"bad parameter" });
+        const pwCheck = validatePasswordPolicy(newPassword);
+        if (!pwCheck.valid) {
+            res.status(400).json({ message: pwCheck.error || "Invalid password", error:"bad parameter" });
             return;
         }
 

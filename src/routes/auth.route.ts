@@ -10,7 +10,7 @@ import { loginRateLimiter, otpIpRateLimiter } from "../lib/rateLimit.ts";
 const router = Router();
 
 router.post("/sign-up", otpIpRateLimiter, signup);
-router.post("/sign-up/verify-email/:token", signupVerification);
+router.post("/sign-up/verify-email/:token", otpIpRateLimiter, signupVerification);
 
 // User sign in
 router.post("/sign-in", loginRateLimiter, signin);
@@ -19,12 +19,13 @@ router.post("/sign-in", loginRateLimiter, signin);
 router.post("/refresh", refreshToken);
 
 // Request new otp code for verification
-// General endpoint for requesting a new otp code
+// General endpoint for requesting a new otp code (POST preferred; GET retained for legacy test compatibility)
+router.post("/verify-email/:token/new", otpIpRateLimiter, requestNewVerificationTokenCode);
 router.get("/verify-email/:token/new", otpIpRateLimiter, requestNewVerificationTokenCode);
 
 router.post("/forget-password", otpIpRateLimiter, requestVerificationForForgetPassword);
-router.post("/forget-password/:token", verifyVerificationForForgetPassword);
-router.put("/forget-password/:token/new-password", processVerificationForForgetPassword);
+router.post("/forget-password/:token", otpIpRateLimiter, verifyVerificationForForgetPassword);
+router.put("/forget-password/:token/new-password", otpIpRateLimiter, processVerificationForForgetPassword);
 
 router.get("/me", authenticate, getMe);
 router.post("/logout", authenticate, logout);
@@ -34,8 +35,8 @@ router.post("/logout-all", authenticate, logoutAll);
 router.post("/register", otpIpRateLimiter, signup);
 router.post("/login", loginRateLimiter, signin);
 router.post("/password-reset/request", otpIpRateLimiter, requestVerificationForForgetPassword);
-router.post("/password-reset/confirm", processVerificationForForgetPassword);
-router.post("/verify-otp", async (req: Request, res: Response) => {
+router.post("/password-reset/confirm", otpIpRateLimiter, processVerificationForForgetPassword);
+router.post("/verify-otp", otpIpRateLimiter, async (req: Request, res: Response) => {
   try {
     req.params = req.params || {};
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";

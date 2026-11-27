@@ -18,6 +18,27 @@ function getClientIp(req: Request): string {
   return (raw?.split(",")[0]?.trim() || req.ip || req.socket?.remoteAddress || "unknown").toLowerCase();
 }
 
+function checkLocalCounter(
+  key: string,
+  limit: number,
+  windowSeconds: number
+): { allowed: boolean; count: number; retryAfterSeconds: number } {
+  const now = Date.now();
+  if (localCounters.size > 5000) {
+    for (const [k, v] of localCounters) {
+      if (v.expiresAt <= now) localCounters.delete(k);
+    }
+  }
+  const existing = localCounters.get(key);
+  if (!existing || existing.expiresAt <= now) {
+    localCounters.set(key, { count: 1, expiresAt: now + windowSeconds * 1000 });
+    return { allowed: true, count: 1, retryAfterSeconds: windowSeconds };
+  }
+  existing.count += 1;
+  const retryAfterSeconds = Math.max(1, Math.ceil((existing.expiresAt - now) / 1000));
+  return { allowed: existing.count <= limit, count: existing.count, retryAfterSeconds };
+}
+
 async function checkUpstashOrLocal(
   key: string,
   limit: number,
@@ -30,15 +51,7 @@ async function checkUpstashOrLocal(
     if (process.env.NODE_ENV === "production") {
       throw new Error("Upstash Redis rate limiting is not configured in production.");
     }
-    const now = Date.now();
-    const existing = localCounters.get(key);
-    if (!existing || existing.expiresAt <= now) {
-      localCounters.set(key, { count: 1, expiresAt: now + windowSeconds * 1000 });
-      return { allowed: true, count: 1, retryAfterSeconds: windowSeconds };
-    }
-    existing.count += 1;
-    const retryAfterSeconds = Math.max(1, Math.ceil((existing.expiresAt - now) / 1000));
-    return { allowed: existing.count <= limit, count: existing.count, retryAfterSeconds };
+    return checkLocalCounter(key, limit, windowSeconds);
   }
 
   const response = await fetch(`${url}/pipeline`, {
@@ -91,12 +104,14 @@ export async function otpIpRateLimiter(req: Request, res: Response, next: NextFu
 
 /**
  * Per-IP + email rate limiter for login.
- * Fails OPEN if the distributed rate limiter is unavailable so users are not locked out.
+ * Degrades to bounded in-memory per-instance rate limiting (never unlimited) if
+ * Upstash Redis is unavailable in production so brute-force protection stays active
+ * without locking out all users during a Redis outage.
  */
 export async function loginRateLimiter(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const ip = getClientIp(req);
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
   try {
-    const ip = getClientIp(req);
-    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
     const ipRes = await checkUpstashOrLocal(`campusmarket:login:ip:${ip}`, LOGIN_MAX_PER_IP, LOGIN_WINDOW_SECONDS);
     if (!ipRes.allowed) {
       res.setHeader("Retry-After", String(ipRes.retryAfterSeconds));
@@ -113,7 +128,21 @@ export async function loginRateLimiter(req: Request, res: Response, next: NextFu
     }
     next();
   } catch (err: any) {
-    console.error("[ALERT] [Login RateLimit] Limiter unavailable; failing open:", err?.message || err);
+    console.error("[ALERT] [Login RateLimit] Distributed limiter unavailable; enforcing local fallback limits:", err?.message || err);
+    const localIpRes = checkLocalCounter(`campusmarket:login:ip:${ip}`, LOGIN_MAX_PER_IP, LOGIN_WINDOW_SECONDS);
+    if (!localIpRes.allowed) {
+      res.setHeader("Retry-After", String(localIpRes.retryAfterSeconds));
+      res.status(429).json({ message: "Too many login attempts. Please try again later.", error: "rate_limit_exceeded" });
+      return;
+    }
+    if (email) {
+      const localEmailRes = checkLocalCounter(`campusmarket:login:email:${email}`, LOGIN_MAX_PER_EMAIL, LOGIN_WINDOW_SECONDS);
+      if (!localEmailRes.allowed) {
+        res.setHeader("Retry-After", String(localEmailRes.retryAfterSeconds));
+        res.status(429).json({ message: "Too many login attempts. Please try again later.", error: "rate_limit_exceeded" });
+        return;
+      }
+    }
     next();
   }
 }

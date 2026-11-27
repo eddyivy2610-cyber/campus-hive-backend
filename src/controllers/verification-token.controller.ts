@@ -26,6 +26,10 @@ export async function requestNewVerificationTokenCode(req: Request, res: Respons
             res.status(403).json({ message: "Invalid verification token", error:"bad token" });
             return;
         }
+        if (verificationToken.verified || verificationToken.consumedAt) {
+            res.status(409).json({ message: "Verification token already used", error:"token_already_used" });
+            return;
+        }
         const now = new Date();
 
         const rawDate = verificationToken.otpHashUpdatedAt || (verificationToken as any).otphashupdatedat;
@@ -72,7 +76,7 @@ export async function requestNewVerificationTokenCode(req: Request, res: Respons
 
 export async function requestVerificationForForgetPassword(req: Request, res: Response): Promise<void> {
     try {
-        const {email} = req.body;
+        const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
 
         if (!email) {
             res.status(400).json({ message: "Invalid email", error:"bad parameter" });

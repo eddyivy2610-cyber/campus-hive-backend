@@ -25,3 +25,18 @@ export function getOtpPepper(): string {
   }
   return pepper || "dev_only_otp_hmac_pepper_change_in_production";
 }
+
+export function getAccessTokenSecret(): string {
+  const secret = process.env.ACCESS_TOKEN_SECRET?.trim();
+  if (process.env.NODE_ENV === "production") {
+    if (!secret || secret.length < 32) {
+      throw new Error(
+        "BOOT FATAL: ACCESS_TOKEN_SECRET is required in production and must be at least 32 characters."
+      );
+    }
+  }
+  if (!secret) {
+    throw new Error("ACCESS_TOKEN_SECRET environment variable is not configured.");
+  }
+  return secret;
+}

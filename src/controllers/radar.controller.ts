@@ -30,6 +30,18 @@ function resolveUserStoreSlug(
   return user?.stores?.[0]?.slug || null;
 }
 
+// Abuse limits for Campus Radar
+const RADAR_MAX_REQUEST_CHARS = 500;
+const RADAR_MAX_REPLY_CHARS = 500;
+const RADAR_MAX_SHORT_FIELD_CHARS = 120;
+const RADAR_MAX_REPLIES_PER_POST = 100;
+const RADAR_MAX_REPLIES_PER_USER_PER_POST = 10;
+const RADAR_MAX_POSTS_PER_HOUR = 5;
+
+function cleanShortField(value: unknown, max = RADAR_MAX_SHORT_FIELD_CHARS): string {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
 function formatTimeAgo(dateInput: Date | string): string {
   try {
     const d = new Date(dateInput);
@@ -107,6 +119,8 @@ export async function listRadarPosts(req: Request, res: Response): Promise<void>
             authorDept: r.authorDept,
             authorAvatar: r.authorAvatar || resolveUserAvatar(replyAuthor),
             authorStoreSlug: r.authorStoreSlug || resolveUserStoreSlug(replyAuthor),
+            parentReplyId: typeof r.parentReplyId === "string" && r.parentReplyId ? r.parentReplyId : null,
+            replyToName: typeof r.replyToName === "string" && r.replyToName ? r.replyToName : null,
             isVerified: Boolean(r.isVerified),
             message: r.message,
             authorTime: formatTimeAgo(r.createdAt || p.createdAt),
@@ -135,6 +149,24 @@ export async function createRadarPost(req: AuthenticatedRequest, res: Response):
       res.status(400).json({ success: false, error: "Request description is required." });
       return;
     }
+    if (requestText.length > RADAR_MAX_REQUEST_CHARS) {
+      res.status(400).json({
+        success: false,
+        error: `Request must be ${RADAR_MAX_REQUEST_CHARS} characters or fewer.`,
+      });
+      return;
+    }
+
+    const recentPostCount = await prisma.radarPost.count({
+      where: { userId, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
+    });
+    if (recentPostCount >= RADAR_MAX_POSTS_PER_HOUR) {
+      res.status(429).json({
+        success: false,
+        error: "You're posting too quickly. Please wait a bit before posting another request.",
+      });
+      return;
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -142,15 +174,12 @@ export async function createRadarPost(req: AuthenticatedRequest, res: Response):
     });
 
     const location =
-      (typeof req.body?.location === "string" && req.body.location.trim()) ||
-      (typeof req.body?.campus === "string" && req.body.campus.trim()) ||
+      cleanShortField(req.body?.location) ||
+      cleanShortField(req.body?.campus) ||
       user?.campus?.name ||
       "Main Campus";
-    const category =
-      typeof req.body?.category === "string" && req.body.category.trim()
-        ? req.body.category.trim()
-        : "all";
-    const budget = typeof req.body?.budget === "string" ? req.body.budget.trim() : "";
+    const category = cleanShortField(req.body?.category, 40) || "all";
+    const budget = cleanShortField(req.body?.budget, 40);
 
     const post = await prisma.radarPost.create({
       data: {
@@ -193,11 +222,45 @@ export async function getRadarPost(req: Request, res: Response): Promise<void> {
   try {
     const id = String(req.params.id || "");
     const post = await prisma.radarPost.findUnique({ where: { id } });
-    if (!post) {
+    if (!post || post.status !== "active") {
       res.status(404).json({ success: false, error: "Radar post not found." });
       return;
     }
-    res.status(200).json({ success: true, data: post });
+    const owner = await prisma.user.findUnique({
+      where: { id: post.userId },
+      select: RADAR_USER_SELECT,
+    });
+    const rawReplies = Array.isArray(post.replies) ? (post.replies as any[]) : [];
+    res.status(200).json({
+      success: true,
+      data: {
+        id: post.id,
+        requesterName: owner?.displayName || owner?.fullName || owner?.username || "Campus Student",
+        requesterHandle: owner?.username || "student",
+        requesterLocation: post.location || owner?.campus?.name || post.campus || "Main Campus",
+        requesterAvatar: resolveUserAvatar(owner),
+        requesterStoreSlug: resolveUserStoreSlug(owner),
+        isVerified: Boolean(owner?.isEmailVerified),
+        requestText: post.requestText,
+        category: post.category || "all",
+        budget: post.budget || "",
+        campus: post.campus || "Main Campus",
+        timeAgo: formatTimeAgo(post.createdAt),
+        replies: rawReplies.map((r) => ({
+          id: r.id,
+          authorName: r.authorName,
+          authorHandle: r.authorHandle,
+          authorDept: r.authorDept,
+          authorAvatar: r.authorAvatar || "",
+          authorStoreSlug: r.authorStoreSlug || null,
+          parentReplyId: typeof r.parentReplyId === "string" && r.parentReplyId ? r.parentReplyId : null,
+          replyToName: typeof r.replyToName === "string" && r.replyToName ? r.replyToName : null,
+          isVerified: Boolean(r.isVerified),
+          message: r.message,
+          authorTime: formatTimeAgo(r.createdAt || post.createdAt),
+        })),
+      },
+    });
   } catch (err) {
     console.error("[GET /radar/:id] Error:", err);
     res.status(500).json({ success: false, error: "Failed to fetch post." });
@@ -246,11 +309,52 @@ export async function replyRadarPost(req: AuthenticatedRequest, res: Response): 
       res.status(400).json({ success: false, error: "Reply message is required" });
       return;
     }
+    if (message.length > RADAR_MAX_REPLY_CHARS) {
+      res.status(400).json({
+        success: false,
+        error: `Reply must be ${RADAR_MAX_REPLY_CHARS} characters or fewer.`,
+      });
+      return;
+    }
 
     const post = await prisma.radarPost.findUnique({ where: { id } });
     if (!post) {
       res.status(404).json({ success: false, error: "Radar post not found" });
       return;
+    }
+
+    const existingReplies = Array.isArray(post.replies) ? (post.replies as any[]) : [];
+    if (existingReplies.length >= RADAR_MAX_REPLIES_PER_POST) {
+      res.status(409).json({ success: false, error: "This request has reached the maximum number of replies." });
+      return;
+    }
+    const userReplyCount = existingReplies.filter((r) => r?.userId === userId).length;
+    if (userReplyCount >= RADAR_MAX_REPLIES_PER_USER_PER_POST) {
+      res.status(429).json({
+        success: false,
+        error: "You've replied to this request too many times. Try messaging the poster instead.",
+      });
+      return;
+    }
+
+    const rawParentId =
+      typeof req.body?.parentReplyId === "string" ? req.body.parentReplyId.trim() : "";
+    let resolvedParentReplyId: string | null = null;
+    let resolvedReplyToName: string | null = null;
+    if (rawParentId) {
+      const targetReply = existingReplies.find((r) => r?.id === rawParentId);
+      if (!targetReply) {
+        res.status(404).json({ success: false, error: "The reply you are responding to was not found." });
+        return;
+      }
+      resolvedParentReplyId =
+        typeof targetReply.parentReplyId === "string" && targetReply.parentReplyId
+          ? targetReply.parentReplyId
+          : String(targetReply.id);
+      resolvedReplyToName =
+        typeof targetReply.authorName === "string" && targetReply.authorName
+          ? targetReply.authorName
+          : null;
     }
 
     const user = await prisma.user.findUnique({
@@ -266,12 +370,12 @@ export async function replyRadarPost(req: AuthenticatedRequest, res: Response): 
       authorDept: user?.campus?.name || "Main Campus",
       authorAvatar: resolveUserAvatar(user),
       authorStoreSlug: resolveUserStoreSlug(user),
+      parentReplyId: resolvedParentReplyId,
+      replyToName: resolvedReplyToName,
       isVerified: Boolean(user?.isEmailVerified),
       message,
       createdAt: new Date().toISOString(),
     };
-
-    const existingReplies = Array.isArray(post.replies) ? (post.replies as any[]) : [];
     const nextReplies = [...existingReplies, newReply];
 
     await prisma.radarPost.update({

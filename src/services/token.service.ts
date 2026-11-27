@@ -1,11 +1,6 @@
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { JWT_AUDIENCE, JWT_ISSUER } from "../lib/config.ts";
-
-
-// Generate strong secrets (store in env variables)
-const ACCESS_SECRET = process.env.ACCESS_TOKEN_SECRET;
-const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET;
+import { JWT_AUDIENCE, JWT_ISSUER, getAccessTokenSecret } from "../lib/config.ts";
 
 export function hashRefreshToken(rawToken: string): string {
     return crypto.createHash("sha256").update(rawToken).digest("hex");
@@ -18,7 +13,7 @@ export function generateOpaqueRefreshToken(): { token: string; tokenHash: string
 }
 
 export function generateAccessToken(userId: string, sessionId: string, tokenVersion = 0): string {
-    const accessSecret = process.env.ACCESS_TOKEN_SECRET || ACCESS_SECRET!;
+    const accessSecret = getAccessTokenSecret();
     return jwt.sign(
         {
             sub: userId,
@@ -44,7 +39,7 @@ export function generateSessionTokens(userId:string, sessionId:string, tokenVers
 
 export async function verifyAccessToken(token:string):Promise<{userId:string, sessionId:string, tokenVersion:number} | null> {
     try {
-        const access_secret = process.env.ACCESS_TOKEN_SECRET!;
+        const access_secret = getAccessTokenSecret();
         const decoded = jwt.verify(token, access_secret, {
             issuer: JWT_ISSUER,
             audience: JWT_AUDIENCE,

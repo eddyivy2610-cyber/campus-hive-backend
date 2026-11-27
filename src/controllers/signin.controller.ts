@@ -8,7 +8,8 @@ import { setSessionCookies, startSession } from "../services/session.service.ts"
 
 export async function signin(req:Request, res:Response):Promise<void> {
     try {
-        const {email, password} = req.body;
+        const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+        const password = typeof req.body?.password === "string" ? req.body.password : "";
 
         if (!email || !validateEmail(email)) {
         res.status(400).json({ message: "Invalid Email Address: Valid address is required" });

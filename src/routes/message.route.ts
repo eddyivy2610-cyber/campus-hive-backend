@@ -11,10 +11,12 @@ import {
   createDeal,
   updateDealCheckIn,
   createDealReview,
+  getParticipantProfile,
 } from "../controllers/message.controller.ts";
 
 const router = Router();
 
+router.get("/participants/:id", authenticate, getParticipantProfile);
 router.get("/conversations", authenticate, listConversations);
 router.post("/conversations", authenticate, createConversation);
 router.get("/conversations/:id", authenticate, getConversationMessages);

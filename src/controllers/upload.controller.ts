@@ -1,15 +1,21 @@
 import crypto from "node:crypto";
 import { Response } from "express";
+import prisma from "../prisma.ts";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 
 const ALLOWED_PURPOSES = new Set([
   "listing_image",
   "store_logo",
   "store_banner",
+  "store_cover",
+  "cover_image",
   "business_document",
   "profile_avatar",
+  "avatar",
   "general",
 ]);
+
+const COVER_PURPOSES = new Set(["store_banner", "store_cover", "cover_image"]);
 
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 const DOC_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".pdf"]);
@@ -77,7 +83,25 @@ export async function signUpload(req: AuthenticatedRequest, res: Response): Prom
     return;
   }
 
-  const maxBytes = purpose === "business_document" ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+  if (COVER_PURPOSES.has(String(purpose))) {
+    const activeStores = await prisma.store.count({
+      where: { ownerId: userId, status: "active" },
+    });
+    if (activeStores === 0) {
+      res.status(403).json({
+        message: "Cover photos are only available to active storefront owners.",
+        error: "forbidden",
+      });
+      return;
+    }
+  }
+
+  const maxBytes =
+    purpose === "business_document"
+      ? 10 * 1024 * 1024
+      : COVER_PURPOSES.has(String(purpose))
+      ? 8 * 1024 * 1024
+      : 5 * 1024 * 1024;
   if (sizeBytes !== undefined) {
     const numericSize = Number(sizeBytes);
     if (!Number.isFinite(numericSize) || numericSize <= 0 || numericSize > maxBytes) {
@@ -178,8 +202,24 @@ export async function uploadFileFallback(req: AuthenticatedRequest, res: Respons
     }
 
     const { fileBuffer, filename, mimeType, purpose } = parsed;
+    if (COVER_PURPOSES.has(purpose)) {
+      const activeStores = await prisma.store.count({
+        where: { ownerId: userId, status: "active" },
+      });
+      if (activeStores === 0) {
+        res.status(403).json({
+          success: false,
+          error: "Cover photos are only available to active storefront owners.",
+        });
+        return;
+      }
+    }
     const isPrivate = purpose === "business_document";
-    const maxBytes = isPrivate ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+    const maxBytes = isPrivate
+      ? 10 * 1024 * 1024
+      : COVER_PURPOSES.has(purpose)
+      ? 8 * 1024 * 1024
+      : 5 * 1024 * 1024;
     if (fileBuffer.length > maxBytes) {
       res.status(400).json({ success: false, error: "File exceeds maximum allowed size." });
       return;

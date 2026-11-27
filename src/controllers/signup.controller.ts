@@ -2,76 +2,132 @@ import crypto from "crypto";
 import { Request, Response } from "express";
 import prisma from "../prisma.ts";
 import { hashOtp, verifyOtp } from "../lib/otp.ts";
-import { hashPassword } from "../lib/password.ts";
+import { hashPassword, validatePasswordPolicy } from "../lib/password.ts";
 import { generateNumericOtp } from "../lib/generate.ts";
 import { generateVerificationToken } from "../services/verification.service.ts";
 import { sendOtpEmailService } from "../services/email.service.ts";
 import { validateEmail } from "../lib/email.ts";
+import { isReservedIdentityName, validateDisplayName } from "../lib/nameValidation.ts";
+import { recordConfidentialSafetyLocation, resolveOrCreateCampusForUser } from "../lib/campuses.ts";
 import { setSessionCookies, startSession } from "../services/session.service.ts";
 
 export async function signup(req: Request, res: Response): Promise<void> {
   try {
-    const { email, password, fullName } = req.body;
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const password = req.body?.password;
 
     // Validate input
-    
     if (!email || !validateEmail(email)) {
       res.status(400).json({ message: "Invalid Email Address: Valid address is required" });
       return;
     }
-    if (!password) {
-      res.status(400).json({ message: "Password is required" });
+
+    const nameCheck = validateDisplayName(req.body?.fullName);
+    if (!nameCheck.valid) {
+      res.status(400).json({ message: nameCheck.error || "Please enter a valid name." });
       return;
     }
-    if (!fullName) {
-      res.status(400).json({ message: "Full name is required" });
-      return;
-    }
+    const fullName = nameCheck.normalized;
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (existingUser) {
-      res.status(409).json({ message: "User already exists" });
+    const pwCheck = validatePasswordPolicy(password);
+    if (!pwCheck.valid) {
+      res.status(400).json({ message: pwCheck.error || "Password does not meet security requirements." });
       return;
     }
 
     // Hash the password using Argon2id (no 72-byte truncation)
     const hashedPassword = await hashPassword(password);
-    // Generate short, natural unique username like john_123
-    const baseName =
-      String(fullName)
-        .trim()
-        .split(/\s+/)[0]
-        .replace(/[^a-zA-Z0-9]/g, "")
-        .toLowerCase()
-        .slice(0, 12) || "user";
 
-    let username = `${baseName}_${crypto.randomInt(100, 1000)}`;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const taken = await prisma.user.findUnique({
-        where: { username },
-        select: { id: true },
-      });
-      if (!taken) break;
-      username =
-        attempt < 3
-          ? `${baseName}_${crypto.randomInt(100, 1000)}`
-          : `${baseName}_${crypto.randomInt(1000, 10000)}`;
-    }
-    // Create new user (explicitly PENDING and BUYER; schema also defaults to PENDING/BUYER)
-    const newUser = await prisma.user.create({
-      data: {
-        email,
-        passwordHash: hashedPassword,
-        fullName,
-        username,
-        accountStatus: "PENDING",
-        role: "BUYER",
-      },
+    // Check if user already exists (normalized lowercase email)
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
     });
+
+    let targetUserId: string;
+
+    if (existingUser) {
+      // Already verified (or non-pending): return non-enumerating 201 response without leaking account existence
+      if (existingUser.isEmailVerified || existingUser.accountStatus !== "PENDING") {
+        const dummyToken = await generateVerificationToken();
+        res.status(201).json({
+          message: "User created successfully",
+          verification: { token: dummyToken, email, expiry: { duration: 10, parameter: "minutes" } },
+        });
+        return;
+      }
+
+      // Unverified PENDING account: allow real email owner to re-register and replace pending credentials
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            passwordHash: hashedPassword,
+            fullName,
+          },
+        }),
+        prisma.verificationToken.updateMany({
+          where: {
+            userId: existingUser.id,
+            type: "EMAIL_VERIFICATION_SIGNUP",
+            verified: false,
+            consumedAt: null,
+          },
+          data: { consumedAt: new Date() },
+        }),
+      ]);
+      targetUserId = existingUser.id;
+    } else {
+      // Generate short, natural unique username like john_123 (avoiding reserved prefixes)
+      const rawBase =
+        String(fullName)
+          .trim()
+          .split(/\s+/)[0]
+          .replace(/[^a-zA-Z0-9]/g, "")
+          .toLowerCase()
+          .slice(0, 12) || "member";
+      const baseName = isReservedIdentityName(rawBase) ? "member" : rawBase;
+
+      let username = `${baseName}_${crypto.randomInt(100, 1000)}`;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const taken = await prisma.user.findUnique({
+          where: { username },
+          select: { id: true },
+        });
+        if (!taken) break;
+        username =
+          attempt < 3
+            ? `${baseName}_${crypto.randomInt(100, 1000)}`
+            : `${baseName}_${crypto.randomInt(1000, 10000)}`;
+      }
+      // Create new user (explicitly PENDING and BUYER; schema also defaults to PENDING/BUYER)
+      const newUser = await prisma.user.create({
+        data: {
+          email,
+          passwordHash: hashedPassword,
+          fullName,
+          username,
+          accountStatus: "PENDING",
+          role: "BUYER",
+        },
+      });
+      targetUserId = newUser.id;
+    }
+
+    // Attach default/selected campus at sign-up (without touching verified profiles)
+    // and record confidential precise coordinates strictly for Admin safety review.
+    if (req.body?.campus) {
+      const campusId = await resolveOrCreateCampusForUser(req.body.campus, targetUserId).catch(
+        () => null
+      );
+      if (campusId) {
+        await prisma.user
+          .update({ where: { id: targetUserId }, data: { campusId } })
+          .catch(() => {});
+      }
+    }
+    if (req.body?.safetyLocation) {
+      await recordConfidentialSafetyLocation(targetUserId, req.body.safetyLocation, "signup");
+    }
 
     const otp = generateNumericOtp(6); // Generate a 6-digit numeric OTP
     const otpHash = hashOtp(otp); // HMAC-SHA256 with server pepper
@@ -82,7 +138,7 @@ export async function signup(req: Request, res: Response): Promise<void> {
       data: {
         token,
         otpHash: otpHash,
-        userId: newUser.id,
+        userId: targetUserId,
         expiresAt,
         type:"EMAIL_VERIFICATION_SIGNUP"
       },
@@ -179,23 +235,31 @@ export async function signupVerification(req:Request, res:Response):Promise<void
         }
         
         const now = new Date();
-        await Promise.all([
-            prisma.user.update({
-                where:{id:verificationToken.userId},
-                data:{
-                    isEmailVerified:true,
-                    accountStatus:"ACTIVE"
-                }
-            }),
-            prisma.verificationToken.update({
-                where:{id:verificationToken.id},
-                data:{
-                    verified:true,
-                    verifiedAt:now,
-                    consumedAt:now,
-                }
-            })
-        ]);
+        // Atomically consume signup verification token so concurrent requests cannot mint multiple sessions
+        const consumedRows = await prisma.$queryRaw<{ id: string }[]>`
+            UPDATE "VerificationToken"
+            SET "verified" = true,
+                "verifiedAt" = ${now},
+                "consumedAt" = ${now}
+            WHERE "id" = ${verificationToken.id}
+              AND "type" = 'EMAIL_VERIFICATION_SIGNUP'
+              AND "verified" = false
+              AND "consumedAt" IS NULL
+              AND "expiresAt" > ${now}
+            RETURNING "id"
+        `;
+        if (consumedRows.length === 0) {
+            res.status(409).json({ message: "Verification token already used", error:"token_already_used" });
+            return;
+        }
+
+        await prisma.user.update({
+            where:{id:verificationToken.userId},
+            data:{
+                isEmailVerified:true,
+                accountStatus:"ACTIVE"
+            }
+        });
 
         let session = await startSession(verificationToken.userId);
         if (!session.success) {

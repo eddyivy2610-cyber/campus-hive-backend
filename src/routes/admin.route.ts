@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAdmin } from "../middlewares/auth.middleware.ts";
+import { loginRateLimiter, otpIpRateLimiter } from "../lib/rateLimit.ts";
 import {
   adminAnalytics,
   adminAuthMe,
@@ -31,8 +32,8 @@ import {
 const router = Router();
 
 // Admin Auth
-router.post("/auth/signin", adminSignIn);
-router.post("/auth/signup", adminSignUp);
+router.post("/auth/signin", loginRateLimiter, adminSignIn);
+router.post("/auth/signup", otpIpRateLimiter, adminSignUp);
 router.get("/auth/me", requireAdmin, adminAuthMe);
 
 // Overview, Analytics & Audit Logs
