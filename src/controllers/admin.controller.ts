@@ -5,11 +5,29 @@ import { Response } from "express";
 import prisma from "../prisma.ts";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 import { toPublicListing, toPublicStore } from "../lib/serializers.ts";
-import { generateAccessToken } from "../services/token.service.ts";
+import { generateAccessToken, verifyAccessToken } from "../services/token.service.ts";
 import { getDummyPasswordHash, validatePasswordPolicy, verifyPassword } from "../lib/password.ts";
 import { validateEmail } from "../lib/email.ts";
 import { MAX_STORES_PER_USER } from "../lib/config.ts";
 import { computeCampusDistanceKm } from "../lib/marketplaceValidation.ts";
+
+// ---------------------------------------------------------------------------
+// Platform Settings — allowed keys and their defaults
+// ---------------------------------------------------------------------------
+const ALLOWED_SETTING_KEYS = ["admin_signup_enabled", "admin_portal_locked"] as const;
+type SettingKey = (typeof ALLOWED_SETTING_KEYS)[number];
+
+const SETTING_DEFAULTS: Record<SettingKey, string> = {
+  admin_signup_enabled: "false",
+  admin_portal_locked: "false",
+};
+
+const SETTING_DESCRIPTIONS: Record<SettingKey, string> = {
+  admin_signup_enabled:
+    "Allow new administrators to register via /admin/auth/sign-up. Disable once all admin accounts are created.",
+  admin_portal_locked:
+    "Emergency kill-switch: returns 404 on all /admin/* routes for everyone including admins. Use only during incident response.",
+};
 
 async function writeAdminLog(params: {
   adminId: string;
@@ -43,8 +61,8 @@ export async function adminSignIn(req: AuthenticatedRequest, res: Response): Pro
         : "";
     const password = typeof req.body?.password === "string" ? req.body.password : "";
 
-    if (!rawIdentity || !password) {
-      res.status(400).json({ success: false, message: "Username/email and password are required." });
+    if (!rawIdentity || !password || password.length > 128) {
+      res.status(401).json({ success: false, message: "Invalid admin credentials." });
       return;
     }
 
@@ -134,6 +152,37 @@ export async function adminSignUp(req: AuthenticatedRequest, res: Response): Pro
     if (!keysMatch) {
       res.status(403).json({ success: false, message: "Invalid administrator registration key." });
       return;
+    }
+
+    // Bootstrap lock: once any active admin exists in non-test environments, creating another
+    // admin requires an authenticated session belonging to an active administrator.
+    const existingAdminCount = await prisma.user.count({
+      where: { role: "ADMIN", accountStatus: "ACTIVE" },
+    });
+    if (existingAdminCount > 0 && process.env.NODE_ENV !== "test") {
+      const authHeader = req.headers.authorization;
+      const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+      const cookieToken = (req as any).cookies?.accessToken || null;
+      const rawToken = bearer || cookieToken;
+      const decoded = rawToken ? await verifyAccessToken(rawToken).catch(() => null) : null;
+      const callingAdmin = decoded
+        ? await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            select: { role: true, accountStatus: true, tokenVersion: true },
+          })
+        : null;
+      if (
+        !callingAdmin ||
+        callingAdmin.role !== "ADMIN" ||
+        callingAdmin.accountStatus !== "ACTIVE" ||
+        callingAdmin.tokenVersion !== decoded?.tokenVersion
+      ) {
+        res.status(403).json({
+          success: false,
+          message: "Administrator registration is locked to existing administrators.",
+        });
+        return;
+      }
     }
 
     const pwCheck = validatePasswordPolicy(password);
@@ -1325,6 +1374,116 @@ export async function adminDuplicateBanner(req: AuthenticatedRequest, res: Respo
     res.status(201).json({ success: true, data: copy });
   } catch (err) {
     console.error("[adminDuplicateBanner] Error:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/settings
+// Returns all platform settings with their current values and descriptions.
+// When called without an authenticated admin, returns only the public-safe
+// keys needed for client-side self-gating (e.g. admin_signup_enabled).
+// ---------------------------------------------------------------------------
+export async function adminGetSettings(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const isAdmin = req.auth?.role === "ADMIN" || req.auth?.role === "admin";
+    // Keys that the signup page may read without authentication
+    const PUBLIC_SAFE_KEYS: SettingKey[] = ["admin_signup_enabled"];
+
+    const rows = await prisma.platformSetting.findMany();
+    const stored = Object.fromEntries(rows.map((r) => [r.key, r]));
+
+    const keysToReturn = isAdmin ? ALLOWED_SETTING_KEYS : PUBLIC_SAFE_KEYS;
+
+    const settings = keysToReturn.map((key) => {
+      const row = stored[key];
+      return {
+        key,
+        value: row ? row.value : SETTING_DEFAULTS[key],
+        // Only expose description and audit fields to actual admins
+        ...(isAdmin
+          ? {
+              description: SETTING_DESCRIPTIONS[key],
+              updatedById: row?.updatedById ?? null,
+              updatedAt: row?.updatedAt ?? null,
+            }
+          : {}),
+      };
+    });
+
+    res.status(200).json({ success: true, data: settings });
+  } catch (err) {
+    console.error("[adminGetSettings] Error:", err);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PATCH /api/admin/settings
+// Body: { key: SettingKey, value: string }
+// Only admins may call this; changes are audit-logged.
+// ---------------------------------------------------------------------------
+export async function adminUpdateSetting(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const admin = req.auth;
+    if (!admin) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+
+    const { key, value } = req.body as { key: unknown; value: unknown };
+
+    // Validate key
+    if (typeof key !== "string" || !(ALLOWED_SETTING_KEYS as readonly string[]).includes(key)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid setting key. Allowed: ${ALLOWED_SETTING_KEYS.join(", ")}`,
+      });
+      return;
+    }
+
+    // Validate value — must be a JSON-encoded boolean for boolean settings
+    if (typeof value !== "string") {
+      res.status(400).json({ success: false, message: "value must be a string" });
+      return;
+    }
+    if (value !== "true" && value !== "false") {
+      res.status(400).json({
+        success: false,
+        message: "value must be \"true\" or \"false\"",
+      });
+      return;
+    }
+
+    const setting = await prisma.platformSetting.upsert({
+      where: { key: key as SettingKey },
+      update: { value, updatedById: admin.userId },
+      create: {
+        key: key as SettingKey,
+        value,
+        description: SETTING_DESCRIPTIONS[key as SettingKey],
+        updatedById: admin.userId,
+      },
+    });
+
+    // Audit log
+    await writeAdminLog({
+      adminId: admin.userId,
+      action: "update_platform_setting",
+      targetType: "platform_setting",
+      targetId: key as string,
+      details: { key, value, previousValue: setting.value },
+    });
+
+    res.status(200).json({ success: true, data: { key: setting.key, value: setting.value } });
+  } catch (err) {
+    console.error("[adminUpdateSetting] Error:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 }

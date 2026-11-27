@@ -27,6 +27,8 @@ import {
   adminUpdateReport,
   adminUpdateStoreStatus,
   adminUpdateUser,
+  adminGetSettings,
+  adminUpdateSetting,
 } from "../controllers/admin.controller.ts";
 
 const router = Router();
@@ -71,5 +73,11 @@ router.post("/banners/:id/publish", requireAdmin, (req, res) => adminSetBannerSt
 router.post("/banners/:id/unpublish", requireAdmin, (req, res) => adminSetBannerStatus("draft", req, res));
 router.post("/banners/:id/archive", requireAdmin, (req, res) => adminSetBannerStatus("archived", req, res));
 router.post("/banners/:id/duplicate", requireAdmin, adminDuplicateBanner);
+
+// Platform Settings (admin-controlled live config)
+// GET is intentionally public so the sign-up page can self-gate without a token.
+// PATCH requires admin authentication.
+router.get("/settings", adminGetSettings);
+router.patch("/settings", requireAdmin, adminUpdateSetting);
 
 export default router;

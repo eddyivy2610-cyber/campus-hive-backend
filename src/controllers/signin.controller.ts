@@ -15,8 +15,8 @@ export async function signin(req:Request, res:Response):Promise<void> {
         res.status(400).json({ message: "Invalid Email Address: Valid address is required" });
         return;
         }
-        if (!password) {
-        res.status(400).json({ message: "Password is required" });
+        if (!password || password.length > 128) {
+        res.status(401).json({ message: "Invalid email or password", error: "bad credentials" });
         return;
         }
 

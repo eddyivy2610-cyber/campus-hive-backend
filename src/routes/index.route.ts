@@ -15,6 +15,7 @@ import { authenticate, AuthenticatedRequest } from "../middlewares/auth.middlewa
 import { getMe } from "../controllers/auth.controller.ts";
 import { listFollowing } from "../controllers/follow.controller.ts";
 import { signPrivateDocumentAccess } from "../controllers/upload.controller.ts";
+import { supportReportRateLimiter, usernameCheckRateLimiter } from "../lib/rateLimit.ts";
 import { verifyAccessToken } from "../services/token.service.ts";
 import prisma from "../prisma.ts";
 
@@ -227,7 +228,7 @@ router.patch("/users/profile", authenticate, async (req: AuthenticatedRequest, r
     res.status(500).json({ message: "Failed to update profile" });
   }
 });
-router.get("/users/check-username", async (req, res) => {
+router.get("/users/check-username", usernameCheckRateLimiter, async (req, res) => {
   const { validateUsernameCandidate } = await import("../lib/nameValidation.ts");
   const check = validateUsernameCandidate(req.query.username);
   if (!check.valid) {
@@ -383,7 +384,7 @@ router.patch("/notifications/:id", authenticate, async (req: AuthenticatedReques
   }
 });
 
-router.post("/reports", authenticate, async (req: AuthenticatedRequest, res) => {
+router.post("/reports", authenticate, supportReportRateLimiter, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.auth?.userId;
     if (!userId) {
@@ -430,15 +431,15 @@ router.post("/reports", authenticate, async (req: AuthenticatedRequest, res) => 
   }
 });
 
-router.post("/support", async (req, res) => {
+router.post("/support", supportReportRateLimiter, async (req, res) => {
   try {
-    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
-    const category = typeof req.body?.category === "string" ? req.body.category.trim() : "general";
+    const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 80) : "";
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase().slice(0, 120) : "";
+    const category = typeof req.body?.category === "string" ? req.body.category.trim().slice(0, 40) : "general";
     const message = typeof req.body?.message === "string" ? req.body.message.trim().slice(0, 2000) : "";
 
-    if (!name || !email || !message) {
-      res.status(400).json({ success: false, message: "Name, email, and message are required." });
+    if (!name || !email || !/^\S+@\S+\.\S+$/.test(email) || !message) {
+      res.status(400).json({ success: false, message: "Valid name, email, and message are required." });
       return;
     }
 

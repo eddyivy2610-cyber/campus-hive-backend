@@ -69,7 +69,8 @@ export const ModelName = {
   AdminLog: 'AdminLog',
   Report: 'Report',
   SellerApplication: 'SellerApplication',
-  RadarPost: 'RadarPost'
+  RadarPost: 'RadarPost',
+  PlatformSetting: 'PlatformSetting'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -416,6 +417,17 @@ export const RadarPostScalarFieldEnum = {
 } as const
 
 export type RadarPostScalarFieldEnum = (typeof RadarPostScalarFieldEnum)[keyof typeof RadarPostScalarFieldEnum]
+
+
+export const PlatformSettingScalarFieldEnum = {
+  key: 'key',
+  value: 'value',
+  description: 'description',
+  updatedById: 'updatedById',
+  updatedAt: 'updatedAt'
+} as const
+
+export type PlatformSettingScalarFieldEnum = (typeof PlatformSettingScalarFieldEnum)[keyof typeof PlatformSettingScalarFieldEnum]
 
 
 export const SortOrder = {

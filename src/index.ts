@@ -61,17 +61,66 @@ app.use(
 app.use(compression());
 app.use(cookieParser());
 
-// CSRF protection: reject state-changing requests with untrusted Origin header
+// CSRF protection: verify Origin (or Referer / Fetch Metadata for cookie-authenticated writes)
 app.use((req: Request, res: Response, next) => {
   if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
     const origin = req.headers.origin;
-    if (origin && !ALLOWED_ORIGINS.includes(origin)) {
-      return res.status(403).json({
-        message: "CSRF check failed: untrusted Origin",
-        error: "csrf_origin_rejected",
-      });
+    if (origin) {
+      if (!ALLOWED_ORIGINS.includes(origin.replace(/\/+$/, ""))) {
+        return res.status(403).json({
+          message: "CSRF check failed: untrusted Origin",
+          error: "csrf_origin_rejected",
+        });
+      }
+    } else {
+      const fetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
+      if (fetchSite === "cross-site") {
+        return res.status(403).json({
+          message: "CSRF check failed: cross-site request rejected",
+          error: "csrf_cross_site_rejected",
+        });
+      }
+      const referer = req.headers.referer;
+      if (referer) {
+        try {
+          const refOrigin = new URL(referer).origin;
+          if (!ALLOWED_ORIGINS.includes(refOrigin)) {
+            return res.status(403).json({
+              message: "CSRF check failed: untrusted Referer",
+              error: "csrf_referer_rejected",
+            });
+          }
+        } catch {
+          return res.status(403).json({
+            message: "CSRF check failed: malformed Referer",
+            error: "csrf_referer_rejected",
+          });
+        }
+      }
+      const hasSessionCookies = Boolean(
+        req.cookies?.accessToken || req.cookies?.refreshToken
+      );
+      if (
+        hasSessionCookies &&
+        !referer &&
+        fetchSite !== "same-origin" &&
+        fetchSite !== "same-site" &&
+        process.env.NODE_ENV === "production"
+      ) {
+        return res.status(403).json({
+          message: "CSRF check failed: Origin or same-origin header required for cookie-authenticated writes.",
+          error: "csrf_origin_required",
+        });
+      }
     }
   }
+  next();
+});
+
+// Prevent intermediary caching on auth and admin endpoints
+app.use(["/api/v1/auth", "/api/v1/admin"], (_req: Request, res: Response, next) => {
+  res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
   next();
 });
 
@@ -84,8 +133,27 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+function stripDangerousKeys(value: unknown, depth = 0): unknown {
+  if (depth > 12 || !value || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripDangerousKeys(item, depth + 1));
+  }
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+    clean[k] = stripDangerousKeys(v, depth + 1);
+  }
+  return clean;
+}
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use((req: Request, _res: Response, next) => {
+  if (req.body && typeof req.body === "object") {
+    req.body = stripDangerousKeys(req.body);
+  }
+  next();
+});
 
 app.get("/health/live", (req: Request, res: Response) => {
   res.setHeader("X-Backend-Identity", "pg-express");

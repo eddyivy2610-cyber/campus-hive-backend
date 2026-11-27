@@ -92,21 +92,47 @@ export async function requestVerificationForForgetPassword(req: Request, res: Re
             return;
         }
 
+        // Enforce 60-second per-email cooldown on password-reset dispatch (blocks email bombing)
+        const latestReset = await prisma.verificationToken.findFirst({
+            where: {
+                userId: user.id,
+                type: "EMAIL_VERIFICATION_PASSWORD_RESET",
+            },
+            orderBy: { createdAt: "desc" },
+            select: { createdAt: true },
+        });
+        if (latestReset && !isOlderThanMinutes(latestReset.createdAt, 1, new Date())) {
+            res.status(202).json({
+                message: "If an account with that email exists, a reset code has been sent.",
+            });
+            return;
+        }
 
         const otp = generateNumericOtp(6); // Generate a 6-digit numeric OTP
         const otpHash = hashOtp(otp); // HMAC-SHA256 with server pepper
         const token = await generateVerificationToken(); // Generate a unique verification token
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // Set expiration time to 10 minutes from now
-        // Store the OTP and token in the database
-        await prisma.verificationToken.create({
-            data: {
-                token,
-                userId:user.id,
-                otpHash: otpHash,
-                expiresAt,
-                type:"EMAIL_VERIFICATION_PASSWORD_RESET"
-            },
-        });
+        const now = new Date();
+        // Invalidate any prior active password-reset tokens for this user before creating a new one
+        await prisma.$transaction([
+            prisma.verificationToken.updateMany({
+                where: {
+                    userId: user.id,
+                    type: "EMAIL_VERIFICATION_PASSWORD_RESET",
+                    consumedAt: null,
+                },
+                data: { consumedAt: now },
+            }),
+            prisma.verificationToken.create({
+                data: {
+                    token,
+                    userId: user.id,
+                    otpHash: otpHash,
+                    expiresAt,
+                    type: "EMAIL_VERIFICATION_PASSWORD_RESET"
+                },
+            }),
+        ]);
 
         let sendEmail = await sendOtpEmailService({otp, email:user.email, purpose:"password-reset"});
         if (!sendEmail.success) {
@@ -130,12 +156,13 @@ export async function verifyVerificationForForgetPassword(req: Request, res: Res
         const {otp} = req.body;
         const {token} = req.params;
 
-        if (!token) {
+        if (!token || typeof token !== "string" || token.length > 128) {
         res.status(400).json({ message: "Invalid verification token", error:"bad token" });
         return;
         }
-        if (!otp) {
-        res.status(400).json({ message: "Invalid otp code", error:"bad otp" });
+        const cleanOtp = typeof otp === "string" ? otp.trim() : "";
+        if (!/^\d{6}$/.test(cleanOtp)) {
+        res.status(400).json({ message: "Verification code must be a valid 6-digit code", error:"bad otp" });
         return;
         }
 

@@ -136,3 +136,9 @@ export type SellerApplication = Prisma.SellerApplicationModel
  * 
  */
 export type RadarPost = Prisma.RadarPostModel
+/**
+ * Model PlatformSetting
+ * Singleton key/value store for live platform configuration.
+ * Admins write to this table from the dashboard; no redeploy needed.
+ */
+export type PlatformSetting = Prisma.PlatformSettingModel

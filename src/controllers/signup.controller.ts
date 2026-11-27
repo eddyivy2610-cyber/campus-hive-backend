@@ -174,12 +174,13 @@ export async function signupVerification(req:Request, res:Response):Promise<void
         const {otp} = req.body;
         const {token} = req.params;
 
-        if (!token) {
+        if (!token || typeof token !== "string" || token.length > 128) {
         res.status(400).json({ message: "Invalid verification token", error:"bad token" });
         return;
         }
-        if (!otp) {
-        res.status(400).json({ message: "Invalid otp code", error:"bad otp" });
+        const cleanOtp = typeof otp === "string" ? otp.trim() : "";
+        if (!/^\d{6}$/.test(cleanOtp)) {
+        res.status(400).json({ message: "Verification code must be a valid 6-digit code", error:"bad otp" });
         return;
         }
 

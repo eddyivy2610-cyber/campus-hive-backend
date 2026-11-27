@@ -13,9 +13,21 @@ export function resetLocalRateLimitsForTest(): void {
 }
 
 function getClientIp(req: Request): string {
-  const fwd = req.headers["x-forwarded-for"];
-  const raw = Array.isArray(fwd) ? fwd[0] : fwd;
-  return (raw?.split(",")[0]?.trim() || req.ip || req.socket?.remoteAddress || "unknown").toLowerCase();
+  // Prioritize trusted single-value edge headers or Express's proxy-aware req.ip
+  // (governed by app.set("trust proxy", ...)) so attackers cannot spoof arbitrary
+  // X-Forwarded-For chains to bypass IP rate limits.
+  const cfIp = req.headers?.["cf-connecting-ip"];
+  if (typeof cfIp === "string" && cfIp.trim()) {
+    return cfIp.trim().toLowerCase();
+  }
+  const trueClientIp = req.headers?.["true-client-ip"];
+  if (typeof trueClientIp === "string" && trueClientIp.trim()) {
+    return trueClientIp.trim().toLowerCase();
+  }
+  if (req.ip && req.ip.trim()) {
+    return req.ip.trim().toLowerCase();
+  }
+  return (req.socket?.remoteAddress || "unknown").toLowerCase();
 }
 
 function checkLocalCounter(
@@ -59,7 +71,7 @@ async function checkUpstashOrLocal(
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify([
       ["INCR", key],
-      ["EXPIRE", key, String(windowSeconds)],
+      ["EXPIRE", key, String(windowSeconds), "NX"],
     ]),
   });
   if (!response.ok) {
@@ -212,4 +224,53 @@ export const uploadActionRateLimiter = createActionRateLimiter({
   limit: 30,
   windowSeconds: 5 * 60,
   message: "Too many file upload requests. Please wait a moment and try again.",
+});
+
+export const radarReplyRateLimiter = createActionRateLimiter({
+  namespace: "radar_reply",
+  limit: 20,
+  windowSeconds: 5 * 60,
+  message: "You are replying too quickly on Campus Radar. Please wait a moment.",
+});
+
+export const messageWriteRateLimiter = createActionRateLimiter({
+  namespace: "message_write",
+  limit: 40,
+  windowSeconds: 60,
+  message: "You are sending messages too quickly. Please wait a moment.",
+});
+
+export const followWriteRateLimiter = createActionRateLimiter({
+  namespace: "follow_write",
+  limit: 25,
+  windowSeconds: 60,
+  message: "Too many follow/unfollow requests. Please slow down.",
+});
+
+export const orderWriteRateLimiter = createActionRateLimiter({
+  namespace: "order_write",
+  limit: 15,
+  windowSeconds: 5 * 60,
+  message: "Too many order requests. Please wait a few minutes.",
+});
+
+export const reviewWriteRateLimiter = createActionRateLimiter({
+  namespace: "review_write",
+  limit: 10,
+  windowSeconds: 10 * 60,
+  message: "Too many review submissions. Please wait a few minutes.",
+});
+
+export const supportReportRateLimiter = createActionRateLimiter({
+  namespace: "support_report",
+  limit: 8,
+  windowSeconds: 15 * 60,
+  message: "Too many support/report submissions from your connection. Please try again later.",
+});
+
+export const usernameCheckRateLimiter = createActionRateLimiter({
+  namespace: "username_check",
+  limit: 30,
+  windowSeconds: 60,
+  message: "Too many username availability checks. Please slow down.",
 });
