@@ -146,3 +146,70 @@ export async function loginRateLimiter(req: Request, res: Response, next: NextFu
     next();
   }
 }
+
+export function createActionRateLimiter(options: {
+  namespace: string;
+  limit: number;
+  windowSeconds: number;
+  message: string;
+}) {
+  return async function actionRateLimiter(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    if (process.env.NODE_ENV === "test") {
+      next();
+      return;
+    }
+    const userId = (req as any).auth?.userId;
+    const actorKey = userId ? `user:${userId}` : `ip:${getClientIp(req)}`;
+    const key = `campusmarket:${options.namespace}:${actorKey}`;
+    try {
+      const result = await checkUpstashOrLocal(key, options.limit, options.windowSeconds);
+      if (!result.allowed) {
+        res.setHeader("Retry-After", String(result.retryAfterSeconds));
+        res.status(429).json({
+          success: false,
+          message: options.message,
+          error: "rate_limit_exceeded",
+        });
+        return;
+      }
+      next();
+    } catch {
+      const localRes = checkLocalCounter(key, options.limit, options.windowSeconds);
+      if (!localRes.allowed) {
+        res.setHeader("Retry-After", String(localRes.retryAfterSeconds));
+        res.status(429).json({
+          success: false,
+          message: options.message,
+          error: "rate_limit_exceeded",
+        });
+        return;
+      }
+      next();
+    }
+  };
+}
+
+export const listingCreateRateLimiter = createActionRateLimiter({
+  namespace: "listing_create",
+  limit: 10,
+  windowSeconds: 10 * 60,
+  message: "You are publishing listings too quickly. Please wait a few minutes and try again.",
+});
+
+export const storeCreateRateLimiter = createActionRateLimiter({
+  namespace: "store_create",
+  limit: 5,
+  windowSeconds: 60 * 60,
+  message: "Too many seller registration attempts. Please try again later.",
+});
+
+export const uploadActionRateLimiter = createActionRateLimiter({
+  namespace: "upload_action",
+  limit: 30,
+  windowSeconds: 5 * 60,
+  message: "Too many file upload requests. Please wait a moment and try again.",
+});

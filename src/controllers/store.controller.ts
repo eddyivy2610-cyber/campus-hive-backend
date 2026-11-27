@@ -3,6 +3,16 @@ import prisma from "../prisma.ts";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 import { MAX_STORES_PER_USER } from "../lib/config.ts";
 import { toPublicStore } from "../lib/serializers.ts";
+import { validateDisplayName } from "../lib/nameValidation.ts";
+import {
+  STORE_DESCRIPTION_MAX_LENGTH,
+  STORE_LOCATION_MAX_LENGTH,
+  validateAndResolveStoreSlug,
+  validatePhoneInput,
+  validatePublicImageUrl,
+  validateStoreName,
+  validateVerificationDocumentUrl,
+} from "../lib/marketplaceValidation.ts";
 
 const PUBLIC_STORE_SELECT = {
   id: true,
@@ -48,16 +58,138 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
       locationProofDocument,
       contact,
     } = req.body || {};
-    if (!name || typeof name !== "string" || !name.trim()) {
-      res.status(400).json({ message: "Store name is required", error: "bad_request" });
+    const storeNameCheck = validateStoreName(name);
+    if (!storeNameCheck.valid) {
+      res.status(400).json({
+        message: storeNameCheck.error || "Invalid store name.",
+        error: "bad_request",
+      });
+      return;
+    }
+    const cleanStoreName = storeNameCheck.normalized;
+
+    const slugCheck = validateAndResolveStoreSlug(slug, cleanStoreName, true);
+    if (!slugCheck.valid) {
+      res.status(400).json({
+        message: slugCheck.error || "Invalid store slug.",
+        error: "bad_request",
+      });
+      return;
+    }
+    const rawSlug = slugCheck.slug;
+    const slugLower = rawSlug.toLowerCase();
+
+    let validatedFullName: string | undefined = undefined;
+    if (typeof fullName === "string" && fullName.trim()) {
+      const fnCheck = validateDisplayName(fullName);
+      if (!fnCheck.valid) {
+        res.status(400).json({
+          message: fnCheck.error || "Invalid full name.",
+          error: "bad_request",
+        });
+        return;
+      }
+      validatedFullName = fnCheck.normalized;
+    }
+
+    const cleanDescription =
+      typeof description === "string"
+        ? description.trim().slice(0, STORE_DESCRIPTION_MAX_LENGTH) || null
+        : null;
+    const cleanCategory =
+      typeof category === "string" ? category.trim().slice(0, 60) || null : null;
+    const cleanCampus =
+      typeof campus === "string" ? campus.trim().slice(0, 120) || null : null;
+    const cleanOperatingLocation =
+      typeof operatingLocation === "string"
+        ? operatingLocation.trim().slice(0, STORE_LOCATION_MAX_LENGTH) || null
+        : null;
+
+    let cleanLogo: string | null = null;
+    if (typeof logo === "string" && logo.trim()) {
+      const logoCheck = validatePublicImageUrl(logo, userId, [
+        "store_logo",
+        "stores",
+        "avatar",
+        "profile_avatar",
+        "users",
+      ]);
+      if (!logoCheck.valid) {
+        res.status(400).json({
+          message: logoCheck.error || "Invalid store logo URL.",
+          error: "bad_request",
+        });
+        return;
+      }
+      cleanLogo = logoCheck.url;
+    }
+
+    let sanitizedContact: Record<string, string> | undefined = undefined;
+    if (contact && typeof contact === "object") {
+      const rawPhone = (contact as any).phone || (contact as any).whatsapp;
+      if (rawPhone) {
+        const phoneCheck = validatePhoneInput(rawPhone);
+        if (!phoneCheck.valid) {
+          res.status(400).json({
+            message: phoneCheck.error || "Invalid phone number.",
+            error: "bad_request",
+          });
+          return;
+        }
+        const rawWhatsapp = (contact as any).whatsapp
+          ? validatePhoneInput((contact as any).whatsapp)
+          : phoneCheck;
+        if (!rawWhatsapp.valid) {
+          res.status(400).json({
+            message: rawWhatsapp.error || "Invalid WhatsApp number.",
+            error: "bad_request",
+          });
+          return;
+        }
+        sanitizedContact = {
+          phone: phoneCheck.phone,
+          whatsapp: rawWhatsapp.phone,
+          ...(typeof (contact as any).email === "string" && (contact as any).email.trim()
+            ? { email: (contact as any).email.trim().toLowerCase().slice(0, 120) }
+            : {}),
+        };
+      }
+    } else if (sellerType && process.env.NODE_ENV !== "test") {
+      res.status(400).json({
+        message: "A valid contact phone or WhatsApp number is required for seller registration.",
+        error: "bad_request",
+      });
       return;
     }
 
-    const rawSlug =
-      typeof slug === "string" && slug.trim()
-        ? slug.trim()
-        : `${name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
-    const slugLower = rawSlug.toLowerCase();
+    const rawDocCandidate =
+      typeof studentIdImage === "string" && studentIdImage.trim()
+        ? studentIdImage.trim()
+        : typeof locationProofDocument === "string" && locationProofDocument.trim()
+        ? locationProofDocument.trim()
+        : null;
+
+    let validatedDocUrl: string | null = null;
+    if (rawDocCandidate) {
+      const docCheck = validateVerificationDocumentUrl(rawDocCandidate, userId);
+      if (!docCheck.valid) {
+        res.status(400).json({
+          message: docCheck.error || "Invalid verification document.",
+          error: "bad_request",
+        });
+        return;
+      }
+      validatedDocUrl = docCheck.url;
+    } else if (sellerType && process.env.NODE_ENV !== "test") {
+      res.status(400).json({
+        message:
+          sellerType === "non_student"
+            ? "Location proof document is required for seller verification."
+            : "Student ID card upload is required for student seller verification.",
+        error: "verification_document_required",
+      });
+      return;
+    }
 
     const resolvedStoreType =
       storeType === "local_business" || sellerType === "non_student"
@@ -65,7 +197,7 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
         : "student_store";
     const resolvedVerificationType =
       typeof verificationType === "string" && verificationType.trim()
-        ? verificationType.trim()
+        ? verificationType.trim().slice(0, 40)
         : sellerType === "non_student"
         ? "location_proof"
         : "student_id";
@@ -86,28 +218,37 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
     }
 
     const application = await prisma.$transaction(async (tx) => {
-      const [existingPendingApp, existingPendingStore, activeStoreCount] = await Promise.all([
-        tx.sellerApplication.findFirst({
-          where: {
-            userId,
-            status: { in: ["pending", "pending_review", "changes_requested"] },
-          },
-          select: { id: true },
-        }),
-        tx.store.findFirst({
-          where: {
-            ownerId: userId,
-            status: { in: ["pending_review", "pending"] },
-          },
-          select: { id: true },
-        }),
-        tx.store.count({
-          where: {
-            ownerId: userId,
-            status: "active",
-          },
-        }),
-      ]);
+      const [existingPendingApp, existingPendingStore, activeStoreCount, existingSlug] =
+        await Promise.all([
+          tx.sellerApplication.findFirst({
+            where: {
+              userId,
+              status: { in: ["pending", "pending_review", "changes_requested"] },
+            },
+            select: { id: true },
+          }),
+          tx.store.findFirst({
+            where: {
+              ownerId: userId,
+              status: { in: ["pending_review", "pending"] },
+            },
+            select: { id: true },
+          }),
+          tx.store.count({
+            where: {
+              ownerId: userId,
+              status: "active",
+            },
+          }),
+          tx.store.findUnique({
+            where: { slugLower },
+            select: { id: true },
+          }),
+        ]);
+
+      if (existingSlug) {
+        throw Object.assign(new Error("Store slug already exists"), { code: "P2002" });
+      }
 
       if (existingPendingApp || existingPendingStore) {
         throw Object.assign(
@@ -120,42 +261,42 @@ export async function createStore(req: AuthenticatedRequest, res: Response): Pro
         throw Object.assign(new Error("Store cap reached"), { code: "STORE_CAP_EXCEEDED" });
       }
 
-      if (typeof fullName === "string" && fullName.trim()) {
+      if (validatedFullName) {
+        const currentUser = await tx.user.findUnique({
+          where: { id: userId },
+          select: { displayName: true },
+        });
         await tx.user.update({
           where: { id: userId },
-          data: { fullName: fullName.trim(), displayName: fullName.trim() },
+          data: {
+            fullName: validatedFullName,
+            ...(!currentUser?.displayName ? { displayName: validatedFullName } : {}),
+          },
         });
       }
-
-      const docUrl =
-        typeof studentIdImage === "string" && studentIdImage.trim()
-          ? studentIdImage.trim()
-          : typeof locationProofDocument === "string" && locationProofDocument.trim()
-          ? locationProofDocument.trim()
-          : null;
 
       return tx.sellerApplication.create({
         data: {
           userId,
           storeId: null,
-          businessName: name.trim(),
-          category: typeof category === "string" ? category : null,
-          campus: typeof campus === "string" ? campus : null,
-          operatingLocation: typeof operatingLocation === "string" ? operatingLocation : null,
-          studentIdUrl: docUrl,
+          businessName: cleanStoreName,
+          category: cleanCategory,
+          campus: cleanCampus,
+          operatingLocation: cleanOperatingLocation,
+          studentIdUrl: validatedDocUrl,
           notes: JSON.stringify({
-            sellerType: sellerType || "student",
-            contact: contact && typeof contact === "object" ? contact : undefined,
+            sellerType: sellerType === "non_student" ? "non_student" : "student",
+            contact: sanitizedContact,
             ...(parsedSafetyLoc ? { safetyLocation: parsedSafetyLoc } : {}),
             storePayload: {
-              name: name.trim(),
+              name: cleanStoreName,
               slug: rawSlug,
               slugLower,
-              description: typeof description === "string" ? description : null,
-              category: typeof category === "string" ? category : null,
-              campus: typeof campus === "string" ? campus : null,
-              operatingLocation: typeof operatingLocation === "string" ? operatingLocation : null,
-              logo: typeof logo === "string" ? logo : null,
+              description: cleanDescription,
+              category: cleanCategory,
+              campus: cleanCampus,
+              operatingLocation: cleanOperatingLocation,
+              logo: cleanLogo,
               // Cover photo is never part of onboarding; always starts empty until set in Profile Settings
               coverImage: null,
               storeType: resolvedStoreType,
@@ -349,20 +490,73 @@ export async function updateStore(req: AuthenticatedRequest, res: Response): Pro
     }
 
     const { name, description, category, campus, operatingLocation, logo, coverImage } = req.body || {};
+
+    let cleanName: string | undefined = undefined;
+    if (typeof name === "string" && name.trim()) {
+      const nameCheck = validateStoreName(name);
+      if (!nameCheck.valid) {
+        res.status(400).json({ message: nameCheck.error || "Invalid store name.", error: "bad_request" });
+        return;
+      }
+      cleanName = nameCheck.normalized;
+    }
+
+    let cleanLogo: string | null | undefined = undefined;
+    if (typeof logo === "string") {
+      if (!logo.trim()) {
+        cleanLogo = null;
+      } else {
+        const lc = validatePublicImageUrl(logo, userId, [
+          "store_logo",
+          "stores",
+          "avatar",
+          "profile_avatar",
+          "users",
+        ]);
+        if (!lc.valid) {
+          res.status(400).json({ message: lc.error || "Invalid store logo URL.", error: "bad_request" });
+          return;
+        }
+        cleanLogo = lc.url;
+      }
+    }
+
+    let cleanCoverImage: string | null | undefined = undefined;
+    if (coverImage === null) {
+      cleanCoverImage = null;
+    } else if (typeof coverImage === "string") {
+      if (!coverImage.trim()) {
+        cleanCoverImage = null;
+      } else {
+        const cc = validatePublicImageUrl(coverImage, userId, [
+          "store_cover",
+          "store_banner",
+          "cover_image",
+          "stores",
+          "users",
+        ]);
+        if (!cc.valid) {
+          res.status(400).json({ message: cc.error || "Invalid cover image URL.", error: "bad_request" });
+          return;
+        }
+        cleanCoverImage = cc.url;
+      }
+    }
+
     const updated = await prisma.store.update({
       where: { id: storeId },
       data: {
-        ...(typeof name === "string" && name.trim() ? { name: name.trim() } : {}),
-        ...(typeof description === "string" ? { description } : {}),
-        ...(typeof category === "string" ? { category } : {}),
-        ...(typeof campus === "string" ? { campus } : {}),
-        ...(typeof operatingLocation === "string" ? { operatingLocation } : {}),
-        ...(typeof logo === "string" ? { logo: logo.trim() || null } : {}),
-        ...(typeof coverImage === "string"
-          ? { coverImage: coverImage.trim() || null }
-          : coverImage === null
-          ? { coverImage: null }
+        ...(cleanName !== undefined ? { name: cleanName } : {}),
+        ...(typeof description === "string"
+          ? { description: description.trim().slice(0, STORE_DESCRIPTION_MAX_LENGTH) }
           : {}),
+        ...(typeof category === "string" ? { category: category.trim().slice(0, 60) } : {}),
+        ...(typeof campus === "string" ? { campus: campus.trim().slice(0, 120) } : {}),
+        ...(typeof operatingLocation === "string"
+          ? { operatingLocation: operatingLocation.trim().slice(0, STORE_LOCATION_MAX_LENGTH) }
+          : {}),
+        ...(cleanLogo !== undefined ? { logo: cleanLogo } : {}),
+        ...(cleanCoverImage !== undefined ? { coverImage: cleanCoverImage } : {}),
       },
       select: {
         ...PUBLIC_STORE_SELECT,

@@ -8,6 +8,8 @@ import { toPublicListing, toPublicStore } from "../lib/serializers.ts";
 import { generateAccessToken } from "../services/token.service.ts";
 import { getDummyPasswordHash, validatePasswordPolicy, verifyPassword } from "../lib/password.ts";
 import { validateEmail } from "../lib/email.ts";
+import { MAX_STORES_PER_USER } from "../lib/config.ts";
+import { computeCampusDistanceKm } from "../lib/marketplaceValidation.ts";
 
 async function writeAdminLog(params: {
   adminId: string;
@@ -654,13 +656,31 @@ export async function adminListBusinessApplications(req: AuthenticatedRequest, r
     });
 
     const userIds = Array.from(new Set(applications.map((a) => a.userId)));
-    const users = userIds.length
-      ? await prisma.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, email: true, fullName: true, displayName: true },
-        })
-      : [];
+    const [users, safetyLogs] = await Promise.all([
+      userIds.length
+        ? prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, email: true, fullName: true, displayName: true },
+          })
+        : Promise.resolve([]),
+      userIds.length
+        ? prisma.adminLog.findMany({
+            where: {
+              action: "USER_SAFETY_LOCATION_CAPTURED",
+              targetId: { in: userIds },
+            },
+            orderBy: { createdAt: "desc" },
+            select: { targetId: true, details: true },
+          })
+        : Promise.resolve([]),
+    ]);
     const userMap = new Map(users.map((u) => [u.id, u]));
+    const fallbackSafetyMap = new Map<string, any>();
+    for (const log of safetyLogs) {
+      if (log.targetId && !fallbackSafetyMap.has(log.targetId) && log.details) {
+        fallbackSafetyMap.set(log.targetId, log.details);
+      }
+    }
 
     const formatted = applications.map((app) => {
       const owner = userMap.get(app.userId);
@@ -675,6 +695,9 @@ export async function adminListBusinessApplications(req: AuthenticatedRequest, r
       }
       const sellerType = parsedNotes?.sellerType === "non_student" ? "non_student" : "student";
       const docs = app.studentIdUrl ? [app.studentIdUrl] : [];
+      const safetyLocation =
+        parsedNotes?.safetyLocation || fallbackSafetyMap.get(app.userId) || null;
+      const distanceToCampusKm = computeCampusDistanceKm(app.campus, safetyLocation);
       return {
         ...app,
         _id: app.id,
@@ -691,6 +714,8 @@ export async function adminListBusinessApplications(req: AuthenticatedRequest, r
         sellerType,
         studentIdImage: app.studentIdUrl || undefined,
         locationProofDocument: app.studentIdUrl || undefined,
+        safetyLocation,
+        distanceToCampusKm,
         submittedAt: app.createdAt.toISOString(),
       };
     });
@@ -725,11 +750,27 @@ export async function adminReviewBusinessApplication(req: AuthenticatedRequest, 
       return;
     }
 
+    let parsedNotes: any = {};
+    if (appDoc.notes) {
+      try {
+        parsedNotes = JSON.parse(appDoc.notes);
+      } catch {}
+    }
+    const isNonStudent = parsedNotes?.sellerType === "non_student";
+    const resolvedVerificationType =
+      parsedNotes?.storePayload?.verificationType ||
+      (isNonStudent ? "location_proof" : "student_id");
+
     const nextStatus =
       action === "approve" ? "approved" : action === "reject" ? "rejected" : "changes_requested";
+
     const updated = await prisma.$transaction(async (tx) => {
-      const appRow = await tx.sellerApplication.update({
-        where: { id },
+      // Atomic idempotent transition guard: only process if currently pending / pending_review / changes_requested
+      const claimed = await tx.sellerApplication.updateMany({
+        where: {
+          id,
+          status: { in: ["pending", "pending_review", "changes_requested", "more_info_needed"] },
+        },
         data: {
           status: nextStatus,
           reviewNote: resolvedNote,
@@ -737,6 +778,13 @@ export async function adminReviewBusinessApplication(req: AuthenticatedRequest, 
           reviewedAt: new Date(),
         },
       });
+      if (claimed.count !== 1) {
+        throw Object.assign(
+          new Error("Application has already been reviewed or is no longer in a reviewable state."),
+          { code: "APPLICATION_ALREADY_PROCESSED" }
+        );
+      }
+
       if (action === "approve") {
         await tx.user.updateMany({
           where: { id: appDoc.userId, role: "BUYER" },
@@ -745,21 +793,37 @@ export async function adminReviewBusinessApplication(req: AuthenticatedRequest, 
         if (appDoc.storeId) {
           await tx.store.update({
             where: { id: appDoc.storeId },
-            data: { status: "active", isVerified: true, verificationType: "student" },
+            data: {
+              status: "active",
+              isVerified: true,
+              storeType: isNonStudent ? "local_business" : "student_store",
+              verificationType: resolvedVerificationType,
+            },
           });
         } else {
-          let parsedNotes: any = {};
-          if (appDoc.notes) {
-            try {
-              parsedNotes = JSON.parse(appDoc.notes);
-            } catch {}
+          const activeStoreCount = await tx.store.count({
+            where: { ownerId: appDoc.userId, status: "active" },
+          });
+          if (activeStoreCount >= MAX_STORES_PER_USER) {
+            throw Object.assign(
+              new Error(`Applicant already owns the maximum of ${MAX_STORES_PER_USER} active store(s).`),
+              { code: "STORE_CAP_EXCEEDED" }
+            );
           }
+
           const sp = parsedNotes?.storePayload || {};
           const storeName = (sp.name || appDoc.businessName || "Campus Store").trim();
-          const rawSlug =
+          let rawSlug =
             typeof sp.slug === "string" && sp.slug.trim()
-              ? sp.slug.trim()
-              : `${storeName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
+              ? sp.slug.trim().toLowerCase()
+              : `${storeName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`;
+          const slugCollision = await tx.store.findUnique({
+            where: { slugLower: rawSlug },
+            select: { id: true },
+          });
+          if (slugCollision) {
+            rawSlug = `${rawSlug}-${crypto.randomBytes(2).toString("hex")}`;
+          }
           const createdStore = await tx.store.create({
             data: {
               ownerId: appDoc.userId,
@@ -774,8 +838,11 @@ export async function adminReviewBusinessApplication(req: AuthenticatedRequest, 
               operatingLocation: sp.operatingLocation ?? appDoc.operatingLocation ?? null,
               logo: sp.logo ?? null,
               coverImage: sp.coverImage ?? null,
-              storeType: sp.storeType === "local_business" ? "local_business" : "student_store",
-              verificationType: sp.verificationType || "student_id",
+              storeType:
+                sp.storeType === "local_business" || isNonStudent
+                  ? "local_business"
+                  : "student_store",
+              verificationType: resolvedVerificationType,
             },
           });
           await tx.sellerApplication.update({
@@ -820,7 +887,7 @@ export async function adminReviewBusinessApplication(req: AuthenticatedRequest, 
           link: action === "approve" ? "/stores" : "/onboarding/seller?retry=true",
         },
       });
-      return appRow;
+      return tx.sellerApplication.findUnique({ where: { id } });
     });
 
     await writeAdminLog({
@@ -832,7 +899,15 @@ export async function adminReviewBusinessApplication(req: AuthenticatedRequest, 
     });
 
     res.status(200).json({ success: true, data: updated });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.code === "APPLICATION_ALREADY_PROCESSED" || err?.code === "STORE_CAP_EXCEEDED") {
+      res.status(409).json({
+        success: false,
+        message: err.message,
+        error: err.code.toLowerCase(),
+      });
+      return;
+    }
     console.error("[adminReviewBusinessApplication] Error:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
   }

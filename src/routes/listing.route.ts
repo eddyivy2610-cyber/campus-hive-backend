@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middlewares/auth.middleware.ts";
+import { listingCreateRateLimiter } from "../lib/rateLimit.ts";
 import {
   createListing,
   deleteListing,
@@ -14,7 +15,7 @@ const router = Router();
 router.get("/", listFeed);
 router.get("/:id", getListingById);
 router.post("/:id/view", trackListingView);
-router.post("/", authenticate, createListing);
+router.post("/", authenticate, listingCreateRateLimiter, createListing);
 router.patch("/:id", authenticate, updateListing);
 router.delete("/:id", authenticate, deleteListing);
 

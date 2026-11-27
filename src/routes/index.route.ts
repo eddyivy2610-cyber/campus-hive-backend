@@ -14,6 +14,7 @@ import radarRoute from "./radar.route.ts";
 import { authenticate, AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
 import { getMe } from "../controllers/auth.controller.ts";
 import { listFollowing } from "../controllers/follow.controller.ts";
+import { signPrivateDocumentAccess } from "../controllers/upload.controller.ts";
 import { verifyAccessToken } from "../services/token.service.ts";
 import prisma from "../prisma.ts";
 
@@ -27,6 +28,7 @@ router.use("/orders", orderRoute);
 router.use("/reviews", reviewRoute);
 router.use("/admin", adminRoute);
 router.use("/upload", uploadRoute);
+router.post("/documents/sign-access", authenticate, signPrivateDocumentAccess);
 router.use("/messages", messageRoute);
 router.use("/dashboard", dashboardRoute);
 router.use("/realtime", realtimeRoute);

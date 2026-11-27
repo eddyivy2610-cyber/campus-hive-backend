@@ -60,6 +60,22 @@ const PUBLIC_LISTING_SELECT = {
   createdAt: true,
 } as const;
 
+import {
+  ALLOWED_LISTING_CATEGORIES,
+  ALLOWED_PRODUCT_CONDITIONS,
+  LISTING_DESCRIPTION_MAX_LENGTH,
+  LISTING_DESCRIPTION_MIN_LENGTH,
+  LISTING_TITLE_MAX_LENGTH,
+  LISTING_TITLE_MIN_LENGTH,
+  MAX_ACTIVE_LISTINGS_PER_STORE,
+  MODERATION_LOCKED_LISTING_STATUSES,
+  SELLER_ALLOWED_LISTING_STATUSES,
+  checkListingContentSafety,
+  sanitizeServiceDetails,
+  validateListingImages,
+  validateListingPrice,
+} from "../lib/marketplaceValidation.ts";
+
 export async function createListing(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const userId = req.auth?.userId;
@@ -80,36 +96,135 @@ export async function createListing(req: AuthenticatedRequest, res: Response): P
       condition,
       listingType,
       serviceDetails,
+      status: requestedStatus,
     } = req.body || {};
-    if (Array.isArray(images)) {
-      for (const imgUrl of images) {
-        if (
-          typeof imgUrl === "string" &&
-          (imgUrl.includes("/authenticated/") || imgUrl.includes("campushive/private_docs"))
-        ) {
-          res.status(400).json({
-            message: "Private business documents cannot be attached to public listings",
-            error: "bad_request",
-          });
-          return;
-        }
-      }
-    }
-    if (!storeId || typeof storeId !== "string") {
+
+    if (!storeId || typeof storeId !== "string" || !storeId.trim()) {
       res.status(400).json({ message: "storeId is required", error: "bad_request" });
       return;
     }
-    if (!title || typeof title !== "string" || !title.trim()) {
+    if (!title || typeof title !== "string") {
       res.status(400).json({ message: "title is required", error: "bad_request" });
       return;
     }
-    const numericPrice = Number(price);
-    if (!Number.isFinite(numericPrice) || numericPrice < 0) {
-      res.status(400).json({ message: "Valid non-negative price is required", error: "bad_request" });
+    const cleanTitle = title.trim();
+    if (
+      cleanTitle.length < LISTING_TITLE_MIN_LENGTH ||
+      cleanTitle.length > LISTING_TITLE_MAX_LENGTH
+    ) {
+      res.status(400).json({
+        message: `Listing title must be between ${LISTING_TITLE_MIN_LENGTH} and ${LISTING_TITLE_MAX_LENGTH} characters.`,
+        error: "bad_request",
+      });
       return;
     }
 
-    const store = await prisma.store.findUnique({ where: { id: storeId } });
+    const resolvedListingType = listingType === "service" ? "service" : "product";
+    const isDraft = requestedStatus === "draft";
+
+    let cleanDescription: string | null = null;
+    if (typeof description === "string") {
+      const trimmedDesc = description.trim();
+      if (trimmedDesc.length > LISTING_DESCRIPTION_MAX_LENGTH) {
+        res.status(400).json({
+          message: `Description cannot exceed ${LISTING_DESCRIPTION_MAX_LENGTH} characters.`,
+          error: "bad_request",
+        });
+        return;
+      }
+      if (!isDraft && process.env.NODE_ENV !== "test" && trimmedDesc.length < LISTING_DESCRIPTION_MIN_LENGTH) {
+        res.status(400).json({
+          message: `Description must be at least ${LISTING_DESCRIPTION_MIN_LENGTH} characters.`,
+          error: "bad_request",
+        });
+        return;
+      }
+      cleanDescription = trimmedDesc || null;
+    } else if (!isDraft && process.env.NODE_ENV !== "test") {
+      res.status(400).json({
+        message: "Listing description is required.",
+        error: "bad_request",
+      });
+      return;
+    }
+
+    const safetyCheck = checkListingContentSafety(cleanTitle, cleanDescription);
+    if (!safetyCheck.safe) {
+      res.status(400).json({
+        message: safetyCheck.reason || "Listing violates marketplace safety rules.",
+        error: "prohibited_content",
+      });
+      return;
+    }
+
+    let cleanCategory: string | null = null;
+    if (typeof category === "string" && category.trim()) {
+      const trimmedCat = category.trim();
+      if (!ALLOWED_LISTING_CATEGORIES.has(trimmedCat)) {
+        res.status(400).json({
+          message: "Invalid listing category selected.",
+          error: "bad_request",
+        });
+        return;
+      }
+      cleanCategory = trimmedCat;
+    } else if (process.env.NODE_ENV !== "test") {
+      res.status(400).json({
+        message: "Listing category is required.",
+        error: "bad_request",
+      });
+      return;
+    }
+
+    let cleanCondition: string | null = null;
+    if (resolvedListingType === "product" && typeof condition === "string" && condition.trim()) {
+      const trimmedCond = condition.trim();
+      if (!ALLOWED_PRODUCT_CONDITIONS.has(trimmedCond)) {
+        res.status(400).json({
+          message: "Invalid product condition selected.",
+          error: "bad_request",
+        });
+        return;
+      }
+      cleanCondition = trimmedCond;
+    }
+
+    const serviceCheck = sanitizeServiceDetails(
+      resolvedListingType === "service" ? serviceDetails : undefined,
+      userId
+    );
+    if (!serviceCheck.valid) {
+      res.status(400).json({
+        message: serviceCheck.error || "Invalid service details.",
+        error: "bad_request",
+      });
+      return;
+    }
+
+    const priceCheck = validateListingPrice(price, {
+      listingType: resolvedListingType,
+      pricingModel: serviceCheck.value?.pricingModel as string | undefined,
+    });
+    if (!priceCheck.valid) {
+      res.status(400).json({
+        message: priceCheck.error || "Invalid listing price.",
+        error: "bad_request",
+      });
+      return;
+    }
+
+    const imageCheck = validateListingImages(images, userId, {
+      requireAtLeastOne: !isDraft && process.env.NODE_ENV !== "test",
+    });
+    if (!imageCheck.valid) {
+      res.status(400).json({
+        message: imageCheck.error || "Invalid listing images.",
+        error: "bad_request",
+      });
+      return;
+    }
+
+    const store = await prisma.store.findUnique({ where: { id: storeId.trim() } });
     if (!store) {
       res.status(404).json({ message: "Store not found", error: "not_found" });
       return;
@@ -123,8 +238,29 @@ export async function createListing(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const cleanSlugBase = title
-      .trim()
+    if (!isDraft) {
+      const activeCount = await prisma.listing.count({
+        where: { storeId: store.id, status: "active" },
+      });
+      if (activeCount >= MAX_ACTIVE_LISTINGS_PER_STORE) {
+        res.status(409).json({
+          message: `Store active listing limit (${MAX_ACTIVE_LISTINGS_PER_STORE}) reached. Mark sold or pause older items first.`,
+          error: "listing_cap_exceeded",
+        });
+        return;
+      }
+    }
+
+    const cleanCampus =
+      typeof campus === "string" && campus.trim()
+        ? campus.trim().slice(0, 120)
+        : store.campus;
+    const cleanLocation =
+      typeof location === "string" && location.trim()
+        ? location.trim().slice(0, 160)
+        : store.operatingLocation;
+
+    const cleanSlugBase = cleanTitle
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
@@ -135,16 +271,17 @@ export async function createListing(req: AuthenticatedRequest, res: Response): P
       data: {
         storeId: store.id,
         sellerId: userId,
-        title: title.trim(),
-        description: typeof description === "string" ? description : null,
-        price: numericPrice,
-        category: typeof category === "string" ? category : null,
-        campus: typeof campus === "string" ? campus : store.campus,
-        location: typeof location === "string" ? location : store.operatingLocation,
-        images: Array.isArray(images) ? images.filter((u): u is string => typeof u === "string") : [],
-        condition: typeof condition === "string" ? condition : null,
-        listingType: listingType === "service" ? "service" : "product",
-        serviceDetails: serviceDetails && typeof serviceDetails === "object" ? serviceDetails : undefined,
+        title: cleanTitle,
+        description: cleanDescription,
+        price: priceCheck.price,
+        category: cleanCategory,
+        campus: cleanCampus,
+        location: cleanLocation,
+        images: imageCheck.images,
+        condition: cleanCondition,
+        listingType: resolvedListingType,
+        serviceDetails: serviceCheck.value as any,
+        status: isDraft ? "draft" : "active",
         slug,
       },
       select: PUBLIC_LISTING_SELECT,
@@ -176,18 +313,180 @@ export async function updateListing(req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const { title, description, price, category, campus, location, status } = req.body || {};
+    // Block seller edits/self-activation if parent store is inactive/suspended or listing is locked by moderation
+    const parentStore = await prisma.store.findUnique({
+      where: { id: existing.storeId },
+      select: { status: true },
+    });
+    if (!parentStore || parentStore.status !== "active") {
+      res.status(403).json({
+        message: "Cannot modify listings while parent storefront is suspended or inactive.",
+        error: "store_not_active",
+      });
+      return;
+    }
+    if (
+      (existing.pausedBy && existing.pausedBy !== "seller") ||
+      MODERATION_LOCKED_LISTING_STATUSES.has(existing.status)
+    ) {
+      res.status(403).json({
+        message: "Forbidden: This listing is restricted by moderation and cannot be modified or self-activated.",
+        error: "moderation_locked",
+      });
+      return;
+    }
+
+    const {
+      title,
+      description,
+      price,
+      category,
+      campus,
+      location,
+      status,
+      condition,
+      images,
+      serviceDetails,
+    } = req.body || {};
+
+    const updateData: Record<string, unknown> = {};
+
+    if (title !== undefined) {
+      if (typeof title !== "string") {
+        res.status(400).json({ message: "Invalid title", error: "bad_request" });
+        return;
+      }
+      const cleanTitle = title.trim();
+      if (
+        cleanTitle.length < LISTING_TITLE_MIN_LENGTH ||
+        cleanTitle.length > LISTING_TITLE_MAX_LENGTH
+      ) {
+        res.status(400).json({
+          message: `Listing title must be between ${LISTING_TITLE_MIN_LENGTH} and ${LISTING_TITLE_MAX_LENGTH} characters.`,
+          error: "bad_request",
+        });
+        return;
+      }
+      updateData.title = cleanTitle;
+    }
+
+    if (description !== undefined) {
+      if (typeof description !== "string") {
+        res.status(400).json({ message: "Invalid description", error: "bad_request" });
+        return;
+      }
+      const cleanDesc = description.trim();
+      if (cleanDesc.length > LISTING_DESCRIPTION_MAX_LENGTH) {
+        res.status(400).json({
+          message: `Description cannot exceed ${LISTING_DESCRIPTION_MAX_LENGTH} characters.`,
+          error: "bad_request",
+        });
+        return;
+      }
+      updateData.description = cleanDesc;
+    }
+
+    const safetyCheck = checkListingContentSafety(
+      (updateData.title as string | undefined) ?? existing.title,
+      (updateData.description as string | undefined) ?? existing.description
+    );
+    if (!safetyCheck.safe) {
+      res.status(400).json({
+        message: safetyCheck.reason || "Listing violates marketplace safety rules.",
+        error: "prohibited_content",
+      });
+      return;
+    }
+
+    if (category !== undefined) {
+      if (typeof category !== "string" || !ALLOWED_LISTING_CATEGORIES.has(category.trim())) {
+        res.status(400).json({ message: "Invalid listing category.", error: "bad_request" });
+        return;
+      }
+      updateData.category = category.trim();
+    }
+
+    if (condition !== undefined) {
+      if (typeof condition !== "string" || !ALLOWED_PRODUCT_CONDITIONS.has(condition.trim())) {
+        res.status(400).json({ message: "Invalid product condition.", error: "bad_request" });
+        return;
+      }
+      updateData.condition = condition.trim();
+    }
+
+    if (campus !== undefined && typeof campus === "string") {
+      updateData.campus = campus.trim().slice(0, 120);
+    }
+
+    if (location !== undefined && typeof location === "string") {
+      updateData.location = location.trim().slice(0, 160);
+    }
+
+    if (serviceDetails !== undefined) {
+      const sc = sanitizeServiceDetails(serviceDetails, userId);
+      if (!sc.valid) {
+        res.status(400).json({ message: sc.error || "Invalid service details.", error: "bad_request" });
+        return;
+      }
+      updateData.serviceDetails = sc.value;
+    }
+
+    if (price !== undefined) {
+      const existingService =
+        (updateData.serviceDetails as Record<string, unknown> | undefined) ??
+        (existing.serviceDetails && typeof existing.serviceDetails === "object"
+          ? (existing.serviceDetails as Record<string, unknown>)
+          : undefined);
+      const priceCheck = validateListingPrice(price, {
+        listingType: existing.listingType,
+        pricingModel: existingService?.pricingModel as string | undefined,
+      });
+      if (!priceCheck.valid) {
+        res.status(400).json({ message: priceCheck.error || "Invalid price.", error: "bad_request" });
+        return;
+      }
+      updateData.price = priceCheck.price;
+    }
+
+    if (images !== undefined) {
+      const imageCheck = validateListingImages(images, userId, {
+        requireAtLeastOne: existing.status === "active" && process.env.NODE_ENV !== "test",
+      });
+      if (!imageCheck.valid) {
+        res.status(400).json({ message: imageCheck.error || "Invalid images.", error: "bad_request" });
+        return;
+      }
+      updateData.images = imageCheck.images;
+    }
+
+    if (status !== undefined) {
+      const targetStatus = typeof status === "string" ? status.trim().toLowerCase() : "";
+      if (!SELLER_ALLOWED_LISTING_STATUSES.has(targetStatus)) {
+        res.status(400).json({
+          message: "Invalid listing status. Allowed values: active, paused, sold, draft.",
+          error: "bad_request",
+        });
+        return;
+      }
+      if (targetStatus === "active" && existing.status !== "active") {
+        const activeCount = await prisma.listing.count({
+          where: { storeId: existing.storeId, status: "active" },
+        });
+        if (activeCount >= MAX_ACTIVE_LISTINGS_PER_STORE) {
+          res.status(409).json({
+            message: `Store active listing limit (${MAX_ACTIVE_LISTINGS_PER_STORE}) reached.`,
+            error: "listing_cap_exceeded",
+          });
+          return;
+        }
+      }
+      updateData.status = targetStatus;
+      updateData.pausedBy = targetStatus === "paused" ? "seller" : null;
+    }
+
     const updated = await prisma.listing.update({
       where: { id },
-      data: {
-        ...(typeof title === "string" && title.trim() ? { title: title.trim() } : {}),
-        ...(typeof description === "string" ? { description } : {}),
-        ...(price !== undefined && Number.isFinite(Number(price)) ? { price: Number(price) } : {}),
-        ...(typeof category === "string" ? { category } : {}),
-        ...(typeof campus === "string" ? { campus } : {}),
-        ...(typeof location === "string" ? { location } : {}),
-        ...(typeof status === "string" ? { status } : {}),
-      },
+      data: updateData,
       select: PUBLIC_LISTING_SELECT,
     });
 

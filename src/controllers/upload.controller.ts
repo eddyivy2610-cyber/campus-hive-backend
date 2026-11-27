@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { Response } from "express";
 import prisma from "../prisma.ts";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware.ts";
+import { detectFileMagicMime } from "../lib/marketplaceValidation.ts";
 
 const ALLOWED_PURPOSES = new Set([
   "listing_image",
@@ -201,7 +202,11 @@ export async function uploadFileFallback(req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    const { fileBuffer, filename, mimeType, purpose } = parsed;
+    const { fileBuffer, filename, purpose } = parsed;
+    if (!ALLOWED_PURPOSES.has(purpose)) {
+      res.status(400).json({ success: false, error: "Invalid upload purpose." });
+      return;
+    }
     if (COVER_PURPOSES.has(purpose)) {
       const activeStores = await prisma.store.count({
         where: { ownerId: userId, status: "active" },
@@ -225,6 +230,30 @@ export async function uploadFileFallback(req: AuthenticatedRequest, res: Respons
       return;
     }
 
+    // Verify actual binary magic bytes (prevents disguised HTML/SVG/executables)
+    const detectedMime = detectFileMagicMime(fileBuffer);
+    if (!detectedMime) {
+      res.status(400).json({
+        success: false,
+        error: "Unsupported or corrupted file format. Upload a genuine JPEG, PNG, WebP, or PDF file.",
+      });
+      return;
+    }
+    if (detectedMime === "application/pdf" && !isPrivate) {
+      res.status(400).json({
+        success: false,
+        error: "PDF documents are only permitted for seller verification uploads.",
+      });
+      return;
+    }
+    if (detectedMime === "image/gif" && isPrivate) {
+      res.status(400).json({
+        success: false,
+        error: "Verification documents must be JPEG, PNG, WebP, or PDF.",
+      });
+      return;
+    }
+
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
     const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
     const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
@@ -238,7 +267,7 @@ export async function uploadFileFallback(req: AuthenticatedRequest, res: Respons
       const signature = crypto.createHash("sha1").update(`${paramsToSign}${apiSecret}`).digest("hex");
 
       const form = new FormData();
-      form.append("file", new Blob([new Uint8Array(fileBuffer)], { type: mimeType }), filename);
+      form.append("file", new Blob([new Uint8Array(fileBuffer)], { type: detectedMime }), filename);
       form.append("api_key", apiKey);
       form.append("timestamp", String(timestamp));
       form.append("signature", signature);
@@ -259,11 +288,124 @@ export async function uploadFileFallback(req: AuthenticatedRequest, res: Respons
     }
 
     // Fallback to inline data URL when Cloudinary is not configured
-    const safeMime = mimeType && mimeType !== "application/octet-stream" ? mimeType : "image/jpeg";
-    const dataUrl = `data:${safeMime};base64,${fileBuffer.toString("base64")}`;
+    const dataUrl = `data:${detectedMime};base64,${fileBuffer.toString("base64")}`;
     res.status(200).json({ success: true, url: dataUrl, isPrivate });
   } catch (err) {
     console.error("Upload fallback error:", err);
     res.status(500).json({ success: false, error: "Failed to process upload." });
+  }
+}
+
+export async function signPrivateDocumentAccess(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const userId = req.auth?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: "Unauthorized" });
+      return;
+    }
+
+    const documentUrl =
+      typeof req.body?.documentUrl === "string" ? req.body.documentUrl.trim() : "";
+    if (!documentUrl) {
+      res.status(400).json({ success: false, error: "documentUrl parameter is required." });
+      return;
+    }
+
+    const requester = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true },
+    });
+    if (!requester) {
+      res.status(401).json({ success: false, error: "Unauthorized" });
+      return;
+    }
+    const isAdmin = requester.role === "ADMIN";
+
+    // Inline base64 fallback documents (only admins may sign arbitrary applicant docs via admin UI)
+    if (documentUrl.startsWith("data:")) {
+      if (
+        !/^data:(image\/(jpeg|jpg|png|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/i.test(
+          documentUrl
+        )
+      ) {
+        res.status(400).json({ success: false, error: "Invalid inline document format." });
+        return;
+      }
+      if (!isAdmin) {
+        const ownsAppDoc = await prisma.sellerApplication.findFirst({
+          where: { userId, studentIdUrl: documentUrl },
+          select: { id: true },
+        });
+        if (!ownsAppDoc) {
+          res.status(403).json({ success: false, error: "Forbidden." });
+          return;
+        }
+      }
+      res.status(200).json({ success: true, signedUrl: documentUrl });
+      return;
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(documentUrl);
+    } catch {
+      res.status(400).json({ success: false, error: "Malformed document URL." });
+      return;
+    }
+
+    if (parsed.protocol !== "https:" || parsed.hostname.toLowerCase() !== "res.cloudinary.com") {
+      res.status(400).json({ success: false, error: "Unsupported document storage host." });
+      return;
+    }
+
+    const pathname = decodeURIComponent(parsed.pathname);
+    if (pathname.includes("..")) {
+      res.status(400).json({ success: false, error: "Invalid document path." });
+      return;
+    }
+
+    const ownsFolder =
+      pathname.includes(`/campushive/business_document/${userId}/`) ||
+      pathname.includes(`/campushive/private_docs/${userId}/`);
+    if (!isAdmin && !ownsFolder) {
+      res.status(403).json({
+        success: false,
+        error: "Forbidden: You are not authorized to view this private verification document.",
+      });
+      return;
+    }
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+    const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+    if (!cloudName || !apiSecret || !pathname.includes("/authenticated/")) {
+      res.status(200).json({ success: true, signedUrl: documentUrl });
+      return;
+    }
+
+    // Extract resourceType and publicId + extension after /authenticated/(v\d+/)?
+    const authMatch = pathname.match(
+      /^\/[^/]+\/(image|raw)\/authenticated\/(?:s--[^/]+--\/)?(?:v\d+\/)?(.+?)(\.[a-zA-Z0-9]+)$/
+    );
+    if (!authMatch) {
+      res.status(200).json({ success: true, signedUrl: documentUrl });
+      return;
+    }
+
+    const [, resourceType, publicId, ext] = authMatch;
+    const expiresAt = Math.floor(Date.now() / 1000) + 300;
+    const signature = crypto
+      .createHash("sha1")
+      .update(`${publicId}${expiresAt}${apiSecret}`)
+      .digest("hex")
+      .slice(0, 16);
+
+    const signedUrl = `https://res.cloudinary.com/${cloudName}/${resourceType}/authenticated/s--${signature}--/v${expiresAt}/${publicId}${ext}`;
+    res.status(200).json({ success: true, signedUrl });
+  } catch (err) {
+    console.error("[signPrivateDocumentAccess] Error:", err);
+    res.status(500).json({ success: false, error: "Failed to authorize document access." });
   }
 }
